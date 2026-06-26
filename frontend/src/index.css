@@ -152,44 +152,43 @@ button, input, select, textarea {
     justify-content: center;
   }
 
-  .nav-links {
-    position: fixed;
-    top: var(--header-height);
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(12, 12, 14, 0.98);
-    backdrop-filter: blur(20px);
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 16px;
-    padding: 40px 24px;
-    transform: translateX(100%);
-    transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-    z-index: 1000;
-    overflow-y: auto;
+  .header {
+    position: relative;
   }
 
-  .nav-links::before {
-    content: '';
+  .nav-links {
     position: absolute;
-    inset: 0;
-    background: radial-gradient(circle at 50% 0%, rgba(255, 107, 0, 0.1) 0%, transparent 50%);
-    pointer-events: none;
+    top: calc(var(--header-height) + 8px);
+    right: 0;
+    background: var(--bg-card);
+    border: 1px solid var(--border-grey);
+    border-radius: 16px;
+    padding: 12px;
+    min-width: 200px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+    transform: translateY(-10px);
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.2s ease;
+    z-index: 1000;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
   }
 
   .nav-links--open {
-    transform: translateX(0);
+    transform: translateY(0);
+    opacity: 1;
+    visibility: visible;
   }
 
   .nav-link {
-    font-size: 20px;
-    padding: 16px 32px;
-    border-radius: 12px;
+    font-size: 14px;
+    padding: 10px 16px;
+    border-radius: 8px;
     transition: all 0.2s ease;
-    position: relative;
-    z-index: 1;
+    text-align: left;
+    justify-content: flex-start;
   }
 
   .nav-link:hover {
@@ -205,9 +204,13 @@ button, input, select, textarea {
 
   .nav-links .btn {
     width: 100%;
-    max-width: 280px;
-    padding: 16px 32px;
-    font-size: 16px;
+    padding: 10px 16px;
+    font-size: 14px;
+    margin-top: 8px;
+  }
+
+  .nav-links > div[style*="color: #fff"] {
+    display: none;
   }
 }
 

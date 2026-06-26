@@ -9,7 +9,8 @@ import StatusBadge from '../../components/shared/StatusBadge';
 import EmptyState from '../../components/shared/EmptyState';
 import Pagination from '../../components/shared/Pagination';
 import { TableSkeleton } from '../../components/shared/LoadingSkeleton';
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet';
+import L from 'leaflet';
 
 export default function WorkerDashboard({ user }) {
   const socketRef = useRef(null);
@@ -42,6 +43,21 @@ export default function WorkerDashboard({ user }) {
   // Simulated GPS state
   const [gpsLocation, setGpsLocation] = useState({ latitude: 24.8607, longitude: 67.0011 });
   const [isSimulatingGps, setIsSimulatingGps] = useState(false);
+
+  // Map icons
+  const workerIcon = L.divIcon({
+    className: 'custom-marker',
+    html: `<div style="background: linear-gradient(135deg, #10b981, #059669); width: 32px; height: 32px; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>`,
+    iconSize: [32, 32],
+    iconAnchor: [16, 16]
+  });
+
+  const customerIcon = L.divIcon({
+    className: 'custom-marker',
+    html: `<div style="background: linear-gradient(135deg, #ff6b00, #e05e00); width: 32px; height: 32px; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></div>`,
+    iconSize: [32, 32],
+    iconAnchor: [16, 16]
+  });
 
   // Chat state
   const [messages, setMessages] = useState([]);
@@ -875,9 +891,55 @@ export default function WorkerDashboard({ user }) {
         <>
           {activeJob ? (
             <div ref={trackingRef} className="card job-tracking-grid job-tracking-grid--equal card--padded">
-                {/* Tracker Panel */}
+                {/* Map Panel */}
                 <div>
-                  <h3 style={{ fontSize: '18px', color: 'var(--primary-orange)', marginBottom: '16px' }}>Active Job Navigation</h3>
+                  <h3 style={{ fontSize: '18px', color: 'var(--primary-orange)', marginBottom: '16px' }}>Live Navigation Map</h3>
+
+                  {/* Real-time Map */}
+                  <div style={{ height: '380px', width: '100%', borderRadius: '20px', overflow: 'hidden', border: '1px solid var(--border-grey)', position: 'relative', marginBottom: '20px' }}>
+                    <MapContainer 
+                      center={[gpsLocation.latitude, gpsLocation.longitude]} 
+                      zoom={14} 
+                      style={{ height: '100%', width: '100%' }}
+                    >
+                      <TileLayer
+                        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                      />
+                      
+                      {/* Worker Marker (Green, updates in real time) */}
+                      <Marker position={[gpsLocation.latitude, gpsLocation.longitude]} icon={workerIcon}>
+                        <Popup>
+                          <strong>Your Location</strong> <br />
+                          {isSimulatingGps ? 'Simulating movement...' : 'Live GPS tracking'}
+                        </Popup>
+                      </Marker>
+
+                      {/* Customer Destination Marker (Orange) */}
+                      {activeJob.location?.latitude && activeJob.location?.longitude && (
+                        <>
+                          <Marker position={[activeJob.location.latitude, activeJob.location.longitude]} icon={customerIcon}>
+                            <Popup>
+                              <strong>Customer Destination</strong> <br />
+                              {activeJob.location.address}
+                            </Popup>
+                          </Marker>
+                          
+                          {/* Route line between worker and customer */}
+                          <Polyline 
+                            positions={[
+                              [gpsLocation.latitude, gpsLocation.longitude],
+                              [activeJob.location.latitude, activeJob.location.longitude]
+                            ]}
+                            color="#ff6b00"
+                            weight={4}
+                            opacity={0.7}
+                            dashArray="10, 10"
+                          />
+                        </>
+                      )}
+                    </MapContainer>
+                  </div>
 
                   <div style={{ background: 'var(--bg-input)', padding: '16px', borderRadius: '12px', border: '1px solid var(--border-grey)', marginBottom: '20px' }}>
                     <span className="form-label" style={{ fontSize: '10px' }}>Customer Address</span>
