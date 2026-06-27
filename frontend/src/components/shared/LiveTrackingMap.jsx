@@ -1,8 +1,6 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
+import React, { useEffect, useMemo, useState } from 'react';
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
-import 'leaflet-routing-machine';
-import 'leaflet-routing-machine/dist/leaflet-routing-machine.css';
 
 function AnimatedMarker({ position, icon, popupTitle, popupBody }) {
   const [currentPosition, setCurrentPosition] = useState(position || [24.8607, 67.0011]);
@@ -40,54 +38,6 @@ function AnimatedMarker({ position, icon, popupTitle, popupBody }) {
       </Popup>
     </Marker>
   );
-}
-
-function RoutingLayer({ workerLocation, customerLocation, onRouteInfo, color }) {
-  const map = useMap();
-
-  useEffect(() => {
-    if (!map || !workerLocation || !customerLocation) return undefined;
-
-    const control = L.Routing.control({
-      waypoints: [
-        L.latLng(workerLocation.latitude, workerLocation.longitude),
-        L.latLng(customerLocation.latitude, customerLocation.longitude)
-      ],
-      router: L.Routing.osrmv1({
-        serviceUrl: 'https://router.project-osrm.org/route/v1'
-      }),
-      addWaypoints: false,
-      draggableWaypoints: false,
-      routeWhileDragging: false,
-      show: false,
-      createMarker: () => null,
-      lineOptions: {
-        styles: [{ color, weight: 4, opacity: 0.8 }]
-      },
-      fitSelectedRoutes: true
-    });
-
-    control.addTo(map);
-
-    control.on('routesfound', (event) => {
-      const [route] = event.routes;
-      if (route) {
-        const distanceKm = Number((route.summary.totalDistance / 1000).toFixed(1));
-        const etaMinutes = Math.max(1, Math.round(route.summary.totalTime / 60));
-        onRouteInfo?.({ distanceKm, etaMinutes, route });
-      }
-    });
-
-    control.on('routingerror', () => {
-      onRouteInfo?.({ distanceKm: null, etaMinutes: null, route: null });
-    });
-
-    return () => {
-      map.removeControl(control);
-    };
-  }, [map, workerLocation?.latitude, workerLocation?.longitude, customerLocation?.latitude, customerLocation?.longitude, color]);
-
-  return null;
 }
 
 export default function LiveTrackingMap({
@@ -152,23 +102,6 @@ export default function LiveTrackingMap({
           />
         )}
 
-        {workerPosition && customerPosition && (
-          <>
-            <RoutingLayer
-              workerLocation={workerLocation}
-              customerLocation={customerLocation}
-              onRouteInfo={onRouteInfo}
-              color={role === 'worker' ? '#10b981' : '#ff6b00'}
-            />
-            <Polyline
-              positions={[workerPosition, customerPosition]}
-              color={role === 'worker' ? '#10b981' : '#ff6b00'}
-              weight={3}
-              opacity={0.45}
-              dashArray="8, 8"
-            />
-          </>
-        )}
       </MapContainer>
     </div>
   );

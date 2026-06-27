@@ -77,6 +77,7 @@ export default function WorkerDashboard({ user }) {
   const availabilityRef = useRef(null);
   const requestRef = useRef(null);
   const trackingRef = useRef(null);
+  const latestProfileRef = useRef(user);
 
   // Walkthrough Onboarding Tutorial State
   const [showTutorial, setShowTutorial] = useState(false);
@@ -92,6 +93,10 @@ export default function WorkerDashboard({ user }) {
   useEffect(() => {
     incomingJobRef.current = incomingJob;
   }, [incomingJob]);
+
+  useEffect(() => {
+    latestProfileRef.current = profile;
+  }, [profile]);
 
   useEffect(() => {
     loadProfile();
@@ -218,37 +223,57 @@ export default function WorkerDashboard({ user }) {
     setTrackingEta(Math.max(1, Math.round(distance * 5)));
   };
 
+  const syncWorkerLocation = (lat, lon) => {
+    const nextCoords = { latitude: lat, longitude: lon };
+    setGpsLocation(nextCoords);
+    updateTrackingStats(nextCoords);
+    updateBackendLocation(lat, lon);
+
+    const currentJob = activeJobRef.current;
+    const workerId = latestProfileRef.current?._id || profile?._id;
+    if (currentJob && socketRef.current && workerId) {
+      socketRef.current.emit('update_worker_location', {
+        jobId: currentJob._id,
+        workerId,
+        latitude: lat,
+        longitude: lon
+      });
+    }
+  };
+
   // Continuous GPS updates
   const startWatchingLocation = () => {
+    if (!navigator.geolocation) {
+      toast.error('Geolocation is not supported in this browser.');
+      return;
+    }
+
     if (locationWatchRef.current) {
       navigator.geolocation.clearWatch(locationWatchRef.current);
+      locationWatchRef.current = null;
     }
-    if (navigator.geolocation) {
-      locationWatchRef.current = navigator.geolocation.watchPosition(
-        (position) => {
-          const lat = position.coords.latitude;
-          const lon = position.coords.longitude;
-          const nextCoords = { latitude: lat, longitude: lon };
-          setGpsLocation(nextCoords);
-          updateTrackingStats(nextCoords);
-          updateBackendLocation(lat, lon);
 
-          // Emit coordinate update over socket if there's an active job
-          if (activeJob && socketRef.current) {
-            socketRef.current.emit('update_worker_location', {
-              jobId: activeJob._id,
-              workerId: profile._id,
-              latitude: lat,
-              longitude: lon
-            });
-          }
-        },
-        (error) => {
-          console.warn('Continuous geolocation watch failed:', error);
-        },
-        { enableHighAccuracy: true, maximumAge: 10000, timeout: 5000 }
-      );
-    }
+    const handleLocationSuccess = (position) => {
+      const lat = position.coords.latitude;
+      const lon = position.coords.longitude;
+      syncWorkerLocation(lat, lon);
+    };
+
+    const handleLocationError = (error) => {
+      console.warn('Geolocation watch failed:', error);
+      toast.error('Location access is blocked. Please allow browser GPS access and refresh the page.');
+    };
+
+    navigator.geolocation.getCurrentPosition(handleLocationSuccess, handleLocationError, {
+      enableHighAccuracy: true,
+      timeout: 10000
+    });
+
+    locationWatchRef.current = navigator.geolocation.watchPosition(
+      handleLocationSuccess,
+      handleLocationError,
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+    );
   };
 
   const stopWatchingLocation = () => {
@@ -257,6 +282,15 @@ export default function WorkerDashboard({ user }) {
       locationWatchRef.current = null;
     }
   };
+
+  useEffect(() => {
+    if (!profile?.status || profile.status !== 'approved') return;
+    if (isAvailable || activeJob) {
+      startWatchingLocation();
+      return () => stopWatchingLocation();
+    }
+    stopWatchingLocation();
+  }, [profile?.status, isAvailable, activeJob?._id]);
 
   // Load Profile from DB
   const loadProfile = async () => {
@@ -710,6 +744,11 @@ export default function WorkerDashboard({ user }) {
   // GPS Coordinate Simulation logic
   const startGpsSimulation = () => {
     if (!activeJob) return;
+    if (navigator.geolocation) {
+      toast.info('Using your browser GPS location for live tracking.');
+      startWatchingLocation();
+      return;
+    }
     setIsSimulatingGps(true);
 
     const customerLat = activeJob.location.latitude;
