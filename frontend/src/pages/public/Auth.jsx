@@ -38,7 +38,9 @@ export default function Auth({ login }) {
   const location = useLocation();
 
   const [isLogin, setIsLogin] = useState(true);
-  const [role, setRole] = useState('customer');
+  const [loginRole, setLoginRole] = useState('customer');
+  const [registerRole, setRegisterRole] = useState('customer');
+  const role = isLogin ? loginRole : registerRole;
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -81,6 +83,10 @@ export default function Auth({ login }) {
           skills: role === 'worker' ? selectedSkills : [],
         };
 
+    console.log('Current mode:', isLogin ? 'LOGIN' : 'REGISTER');
+    console.log('Current role state:', role);
+    console.log('Submitting payload:', payload);
+
     try {
       const response = await fetch(`${API_URL}${endpoint}`, {
         method: 'POST',
@@ -101,6 +107,7 @@ export default function Auth({ login }) {
       } else {
         setSuccess(data.message || 'Registration successful! Please sign in.');
         setIsLogin(true);
+        setLoginRole(role);
         setName('');
         setPhone('');
         setPassword('');
@@ -191,7 +198,14 @@ export default function Auth({ login }) {
                   key={id}
                   type="button"
                   className={`auth-role-card ${role === id ? 'active' : ''}`}
-                  onClick={() => setRole(id)}
+                  onClick={() => {
+                    console.log('Selected role:', id);
+                    if (isLogin) {
+                      setLoginRole(id);
+                    } else {
+                      setRegisterRole(id);
+                    }
+                  }}
                 >
                   <span className="auth-role-card__icon">
                     <Icon size={20} />

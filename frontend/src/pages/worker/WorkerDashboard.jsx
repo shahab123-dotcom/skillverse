@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import io from 'socket.io-client';
-import { MapPin, Phone, CheckCircle, Navigation, Send, AlertTriangle, MessageSquare, Mic, ListChecks, CreditCard, Briefcase, User, Map, Check, X, Hammer, X as XIcon } from 'lucide-react';
+import { MapPin, Phone, CheckCircle, Navigation, Send, AlertTriangle, MessageSquare, Mic, ListChecks, CreditCard, Briefcase, User, Map, Check, X, Hammer, X as XIcon, Building2 } from 'lucide-react';
 import { API_URL } from '../../App';
 import { useToast } from '../../context/ToastContext';
 import DashboardLayout from '../../components/shared/DashboardLayout';
@@ -70,6 +70,15 @@ export default function WorkerDashboard({ user }) {
   const [chatRecordingDuration, setChatRecordingDuration] = useState(0);
   const chatRecordingIntervalRef = useRef(null);
   const chatChunksRef = useRef([]);
+
+  const [constructorForm, setConstructorForm] = useState({
+    constructionDetails: '',
+    experienceYears: '',
+    portfolioUrl: ''
+  });
+  const [constructorLoading, setConstructorLoading] = useState(false);
+  const [constructorError, setConstructorError] = useState('');
+  const [constructorSuccess, setConstructorSuccess] = useState('');
   const profileRef = useRef(null);
   const availabilityRef = useRef(null);
   const requestRef = useRef(null);
@@ -413,6 +422,49 @@ export default function WorkerDashboard({ user }) {
     }
   };
 
+  const handleConstructorInput = (field, value) => {
+    setConstructorForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleConstructorRequest = async () => {
+    setConstructorError('');
+    setConstructorSuccess('');
+
+    if (!constructorForm.constructionDetails.trim() || !constructorForm.experienceYears || !constructorForm.portfolioUrl.trim()) {
+      setConstructorError('Please complete all constructor verification fields.');
+      return;
+    }
+
+    setConstructorLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/api/workers/request-constructor`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          constructionDetails: constructorForm.constructionDetails,
+          experienceYears: Number(constructorForm.experienceYears),
+          portfolioUrl: constructorForm.portfolioUrl
+        })
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setConstructorSuccess(data.message || 'Constructor verification request submitted.');
+        setConstructorForm({ constructionDetails: '', experienceYears: '', portfolioUrl: '' });
+        await loadProfile();
+      } else {
+        setConstructorError(data.error || 'Failed to submit constructor request.');
+      }
+    } catch (error) {
+      console.error('Constructor request failed:', error);
+      setConstructorError('Request failed. Please try again.');
+    } finally {
+      setConstructorLoading(false);
+    }
+  };
+
   const handleRejectJob = async () => {
     if (!activeJob) return;
     try {
@@ -730,6 +782,7 @@ export default function WorkerDashboard({ user }) {
     overview: { title: 'Overview', subtitle: 'Your earnings, profile, and performance at a glance.' },
     'active-job': { title: 'Active Job', subtitle: 'Navigate to the customer, chat, and update job status.' },
     'construction': { title: 'Construction Projects', subtitle: 'Review assigned construction projects and locations.' },
+    'constructor-verification': { title: 'Constructor Verification', subtitle: 'Request and monitor constructor verification status.' },
     history: { title: 'Service History', subtitle: 'Review past jobs and payment records.' },
   }[activeTab];
 
@@ -1236,6 +1289,111 @@ export default function WorkerDashboard({ user }) {
               />
             </>
           )}
+        </div>
+      )}
+
+      {activeTab === 'constructor-verification' && (
+        <div className="card card--padded">
+          <div className="section-header">
+            <Building2 size={20} color="var(--primary-orange)" />
+            <div className="section-header__text">
+              <h3>Constructor Verification</h3>
+              <p>Submit your constructor credentials and track admin review.</p>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gap: '18px' }}>
+            <div style={{ display: 'grid', gap: '12px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
+                <div>
+                  <span className="form-label">Current status</span>
+                  <p style={{ fontSize: '14px', color: '#fff', marginTop: '4px' }}>
+                    {profile.constructorDetails?.status === 'approved' ? 'Approved Constructor'
+                      : profile.constructorDetails?.status === 'rejected' ? 'Verification Rejected'
+                      : profile.constructorDetails?.status === 'pending' ? 'Pending Review'
+                      : 'Not requested'}
+                  </p>
+                </div>
+                {profile.constructorDetails?.status === 'approved' ? (
+                  <StatusBadge status="success" label="Constructor" />
+                ) : profile.constructorDetails?.status === 'pending' ? (
+                  <StatusBadge status="info" label="Pending" />
+                ) : (
+                  <StatusBadge status="secondary" label="Not requested" />
+                )}
+              </div>
+
+              <div style={{ background: 'var(--bg-input)', borderRadius: '14px', padding: '18px', border: '1px solid var(--border-grey)' }}>
+                <h4 style={{ fontSize: '16px', marginBottom: '14px' }}>Why verify as a constructor?</h4>
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.7 }}>
+                  Verified constructors can receive construction projects and manage larger assignments across construction and renovation jobs. Submit details about your experience and portfolio for admin review.
+                </p>
+              </div>
+            </div>
+
+            <div className="card card--padded" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border-grey)' }}>
+              <div style={{ display: 'grid', gap: '16px' }}>
+                <div>
+                  <label className="form-label" htmlFor="constructor-details">Constructor experience details</label>
+                  <textarea
+                    id="constructor-details"
+                    value={constructorForm.constructionDetails}
+                    onChange={(e) => handleConstructorInput('constructionDetails', e.target.value)}
+                    className="form-input"
+                    rows={5}
+                    placeholder="Describe your constructor experience, certifications, and team management background"
+                    style={{ minHeight: '120px' }}
+                  />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div>
+                    <label className="form-label" htmlFor="constructor-experience">Years of experience</label>
+                    <input
+                      id="constructor-experience"
+                      type="number"
+                      min="0"
+                      value={constructorForm.experienceYears}
+                      onChange={(e) => handleConstructorInput('experienceYears', e.target.value)}
+                      className="form-input"
+                      placeholder="e.g. 5"
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label" htmlFor="constructor-portfolio">Portfolio URL</label>
+                    <input
+                      id="constructor-portfolio"
+                      type="url"
+                      value={constructorForm.portfolioUrl}
+                      onChange={(e) => handleConstructorInput('portfolioUrl', e.target.value)}
+                      className="form-input"
+                      placeholder="https://portfolio.example.com"
+                    />
+                  </div>
+                </div>
+
+                {constructorError && (
+                  <div className="auth-alert auth-alert--error" role="alert">
+                    {constructorError}
+                  </div>
+                )}
+                {constructorSuccess && (
+                  <div className="auth-alert auth-alert--success" role="status">
+                    {constructorSuccess}
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleConstructorRequest}
+                  className="btn btn-primary"
+                  disabled={constructorLoading || profile.constructorDetails?.status === 'pending' || profile.constructorDetails?.status === 'approved'}
+                >
+                  {constructorLoading ? 'Submitting request…' : profile.constructorDetails?.status === 'pending' ? 'Request pending' : 'Request constructor verification'}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 

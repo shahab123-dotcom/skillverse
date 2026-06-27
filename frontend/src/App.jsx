@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useNavigate, Navigate } from 'react-router-dom';
-import { LogOut, Wrench, Shield, User, HardHat, Compass, Menu, X } from 'lucide-react';
+import { LogOut, Wrench, Shield, User, HardHat, Compass, Menu, X, Building2 } from 'lucide-react';
 import { ToastProvider } from './context/ToastContext';
 import { ConfirmProvider } from './context/ConfirmContext';
 import Home from './pages/public/Home';
@@ -48,7 +48,8 @@ function Navigation({ user, logout }) {
             )}
             {user.role === 'worker' && (
               <Link to="/worker" className="nav-link flex items-center gap-1" onClick={() => setMobileMenuOpen(false)}>
-                <HardHat size={16} /> Worker Workspace
+                {user.isConstructor ? <Building2 size={16} /> : <HardHat size={16} />}
+                {user.isConstructor ? 'Constructor Workspace' : 'Worker Workspace'}
               </Link>
             )}
             {user.role === 'admin' && (
@@ -58,6 +59,9 @@ function Navigation({ user, logout }) {
             )}
             <div className="nav-link flex items-center gap-1" style={{ color: '#fff', fontWeight: 600 }}>
               <User size={16} style={{ color: 'var(--primary-orange)' }} /> {user.name}
+              {user.isConstructor && (
+                <span style={{ fontSize: '11px', background: 'var(--primary-orange)', padding: '2px 8px', borderRadius: '4px', marginLeft: '8px' }}>Constructor</span>
+              )}
             </div>
             <button onClick={handleLogout} className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px' }}>
               <LogOut size={14} /> Logout

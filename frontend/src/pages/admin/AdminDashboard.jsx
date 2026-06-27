@@ -108,6 +108,29 @@ export default function AdminDashboard({ user }) {
     }
   };
 
+  const handleConstructorApproval = async (workerId, constructorStatus) => {
+    try {
+      const response = await fetch(`${API_URL}/api/admin/workers/${workerId}/constructor-approval`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({ constructorStatus })
+      });
+      if (response.ok) {
+        toast.success(`Constructor verification ${constructorStatus}.`);
+        loadAdminData();
+      } else {
+        const data = await response.json();
+        toast.error(data.error || 'Failed to update constructor request status.');
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error('Failed to update constructor request status.');
+    }
+  };
+
   const handleRemoveWorker = async (workerId) => {
     const confirmed = await confirm({
       title: 'Remove Worker',
@@ -389,7 +412,9 @@ export default function AdminDashboard({ user }) {
                       <th style={{ padding: '12px' }}>Email</th>
                       <th style={{ padding: '12px' }}>Phone</th>
                       <th style={{ padding: '12px' }}>Skills</th>
+                      <th style={{ padding: '12px' }}>Role</th>
                       <th style={{ padding: '12px' }}>Approval Status</th>
+                      <th style={{ padding: '12px' }}>Constructor Request</th>
                       <th style={{ padding: '12px' }}>Account</th>
                       <th style={{ padding: '12px' }}>Requests Stats</th>
                       <th style={{ padding: '12px' }}>Actions</th>
@@ -407,7 +432,42 @@ export default function AdminDashboard({ user }) {
                           </div>
                         </td>
                         <td style={{ padding: '12px' }}>
+                          {w.isConstructor ? (
+                            <StatusBadge status="info" label="Constructor" />
+                          ) : (
+                            <StatusBadge status="info" label="Worker" />
+                          )}
+                        </td>
+                        <td style={{ padding: '12px' }}>
                           <StatusBadge status={w.status} />
+                        </td>
+                        <td style={{ padding: '12px' }}>
+                          {w.constructorDetails?.status === 'pending' ? (
+                            <div style={{ display: 'grid', gap: '6px' }}>
+                              <StatusBadge status="pending" label="Pending Review" />
+                              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                <button
+                                  onClick={() => handleConstructorApproval(w._id, 'approved')}
+                                  className="btn btn-primary"
+                                  style={{ padding: '6px 10px', fontSize: '11px', background: 'var(--success-color)' }}
+                                >
+                                  <Check size={12} /> Approve
+                                </button>
+                                <button
+                                  onClick={() => handleConstructorApproval(w._id, 'rejected')}
+                                  className="btn btn-danger"
+                                  style={{ padding: '6px 10px', fontSize: '11px' }}
+                                >
+                                  <X size={12} /> Reject
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <StatusBadge
+                              status={w.constructorDetails?.status === 'none' ? 'info' : w.constructorDetails?.status || 'info'}
+                              label={w.constructorDetails?.status === 'none' ? 'No Request' : undefined}
+                            />
+                          )}
                         </td>
                         <td style={{ padding: '12px' }}>
                           <StatusBadge status={w.isBlocked ? 'blocked' : 'active'} label={w.isBlocked ? 'Blocked' : 'Active'} />
