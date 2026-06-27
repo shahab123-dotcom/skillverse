@@ -20,6 +20,14 @@ const WorkerSchema = new Schema({
   skills: [{ type: String }], // e.g. Plumbing, Electrical, Cleaning, Structural, Woodwork, etc.
   status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
   isAvailable: { type: Boolean, default: false },
+  isConstructor: { type: Boolean, default: false }, // Constructor flag for construction projects
+  constructorDetails: {
+    constructionDetails: { type: String, default: '' },
+    experienceYears: { type: Number, default: 0 },
+    portfolioUrl: { type: String, default: '' },
+    requestedAt: { type: Date, default: null },
+    status: { type: String, enum: ['none', 'pending', 'approved', 'rejected'], default: 'none' }
+  },
   latitude: { type: Number, default: 24.8607 },  // Default coordinates (e.g. Karachi-like center)
   longitude: { type: Number, default: 67.0011 },
   totalRequests: { type: Number, default: 0 },

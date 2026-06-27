@@ -50,7 +50,9 @@ const authenticateToken = (req, res, next) => {
 router.post('/auth/register', async (req, res) => {
   try {
     const { name, email, password, phone, role, skills } = req.body;
-    
+
+    console.log('Registration request - Role:', role, 'Skills:', skills, 'Email:', email);
+
     if (!name || !email || !password || !phone) {
       return res.status(400).json({ error: 'All fields are required' });
     }
@@ -102,16 +104,29 @@ router.post('/auth/login', async (req, res) => {
   try {
     const { email, password, role } = req.body;
 
+    console.log('Login request - Role:', role, 'Email:', email);
+    console.log('Full login request body:', req.body);
+
     if (!email || !password || !role) {
+      console.log('Missing login fields:', { email: !!email, password: !!password, role: !!role });
       return res.status(400).json({ error: 'Email, password and role are required' });
     }
 
     if (role === 'worker') {
+      console.log('Looking for worker with email:', email);
       const worker = await Worker.findOne({ email });
-      if (!worker) return res.status(400).json({ error: 'Invalid worker credentials' });
+      if (!worker) {
+        console.log('Worker not found for email:', email);
+        return res.status(400).json({ error: 'Invalid worker credentials' });
+      }
+
+      console.log('Worker found:', worker.name, 'isConstructor:', worker.isConstructor, 'status:', worker.status);
 
       const isMatch = await bcrypt.compare(password, worker.password);
-      if (!isMatch) return res.status(400).json({ error: 'Invalid worker credentials' });
+      if (!isMatch) {
+        console.log('Password mismatch for worker:', email);
+        return res.status(400).json({ error: 'Invalid worker credentials' });
+      }
 
       // Workers need to know their approval status
       if (worker.status === 'rejected') {
@@ -123,6 +138,7 @@ router.post('/auth/login', async (req, res) => {
       }
 
       const token = jwt.sign({ id: worker._id, role: 'worker', status: worker.status }, JWT_SECRET, { expiresIn: '24h' });
+      console.log('Login successful for:', worker.name, 'isConstructor:', worker.isConstructor);
       return res.json({
         token,
         user: {
@@ -133,6 +149,7 @@ router.post('/auth/login', async (req, res) => {
           role: 'worker',
           status: worker.status,
           isAvailable: worker.isAvailable,
+          isConstructor: worker.isConstructor || false,
           skills: worker.skills
         }
       });
@@ -208,6 +225,40 @@ router.put('/workers/availability', authenticateToken, async (req, res) => {
   }
 });
 
+// Request constructor status
+router.post('/workers/request-constructor', authenticateToken, async (req, res) => {
+  try {
+    if (req.user.role !== 'worker') return res.status(403).json({ error: 'Unauthorized' });
+    
+    const { constructionDetails, experienceYears, portfolioUrl } = req.body;
+    
+    const worker = await Worker.findById(req.user.id);
+    if (!worker) return res.status(404).json({ error: 'Worker not found' });
+    
+    if (worker.constructorDetails?.status === 'pending') {
+      return res.status(400).json({ error: 'Constructor verification request is already pending review' });
+    }
+    
+    worker.constructorDetails = {
+      constructionDetails,
+      experienceYears,
+      portfolioUrl,
+      requestedAt: new Date(),
+      status: 'pending' // Requires admin approval
+    };
+    
+    await worker.save();
+    
+    return res.json({ 
+      message: 'Constructor request submitted. Pending admin approval.',
+      worker: { ...worker.toObject(), role: 'worker' }
+    });
+  } catch (error) {
+    console.error('Constructor request error:', error);
+    res.status(500).json({ error: 'Failed to submit constructor request' });
+  }
+});
+
 // Update location GPS coordinates
 router.put('/workers/location', authenticateToken, async (req, res) => {
   try {
@@ -255,6 +306,33 @@ router.put('/admin/workers/:id/approve', authenticateToken, async (req, res) => 
 
     res.json({ message: `Worker ${status} successfully`, worker });
   } catch (error) {
+    res.status(500).json({ error: 'Operation failed' });
+  }
+});
+
+// Approve or reject constructor verification request
+router.put('/admin/workers/:id/constructor-approval', authenticateToken, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
+    const { constructorStatus } = req.body; // 'approved' or 'rejected'
+
+    if (!['approved', 'rejected'].includes(constructorStatus)) {
+      return res.status(400).json({ error: 'Invalid constructorStatus value' });
+    }
+
+    const worker = await Worker.findById(req.params.id);
+    if (!worker) return res.status(404).json({ error: 'Worker not found' });
+    if (!worker.constructorDetails || worker.constructorDetails.status !== 'pending') {
+      return res.status(400).json({ error: 'No pending constructor verification request found' });
+    }
+
+    worker.constructorDetails.status = constructorStatus;
+    worker.isConstructor = constructorStatus === 'approved';
+    await worker.save();
+
+    res.json({ message: `Constructor verification ${constructorStatus} successfully`, worker: worker.toObject() });
+  } catch (error) {
+    console.error('Constructor approval error:', error);
     res.status(500).json({ error: 'Operation failed' });
   }
 });
