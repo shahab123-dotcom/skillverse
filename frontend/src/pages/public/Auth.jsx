@@ -65,6 +65,16 @@ export default function Auth({ login }) {
     setSuccess('');
   };
 
+  const parseResponse = async (response) => {
+    const bodyText = await response.text();
+    if (!bodyText) return {};
+    try {
+      return JSON.parse(bodyText);
+    } catch {
+      return { error: bodyText.replace(/<[^>]*>/g, ' ').trim() || `Server error ${response.status}` };
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -94,8 +104,8 @@ export default function Auth({ login }) {
         body: JSON.stringify(payload),
       });
 
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Something went wrong');
+      const data = await parseResponse(response);
+      if (!response.ok) throw new Error(data.error || `Request failed with status ${response.status}`);
 
       if (isLogin) {
         login(data.token, data.user);

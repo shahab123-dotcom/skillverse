@@ -674,8 +674,8 @@ export default function CustomerDashboard({ user }) {
           category: conCategory,
           description: `Title: ${conTitle}. Description: ${conDescription}`,
           location: {
-            latitude: 24.8607,
-            longitude: 67.0011,
+            latitude: latitude || 24.8607,
+            longitude: longitude || 67.0011,
             address: conAddress
           },
           paymentAmount: Number(conBudget)

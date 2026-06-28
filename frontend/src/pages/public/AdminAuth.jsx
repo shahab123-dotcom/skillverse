@@ -16,6 +16,16 @@ export default function AdminAuth({ login }) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const parseResponse = async (response) => {
+    const bodyText = await response.text();
+    if (!bodyText) return {};
+    try {
+      return JSON.parse(bodyText);
+    } catch {
+      return { error: bodyText.replace(/<[^>]*>/g, ' ').trim() || `Server error ${response.status}` };
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -28,7 +38,7 @@ export default function AdminAuth({ login }) {
         body: JSON.stringify({ email, password, role: 'admin' }),
       });
 
-      const data = await response.json();
+      const data = await parseResponse(response);
       if (!response.ok) throw new Error(data.error || 'Authentication failed');
 
       if (data.user.role !== 'admin') {

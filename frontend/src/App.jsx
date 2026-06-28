@@ -12,7 +12,7 @@ import WorkerDashboard from './pages/worker/WorkerDashboard';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import Footer from './components/shared/Footer';
 
-export const API_URL = import.meta.env.VITE_API_URL || '';
+export const API_URL = import.meta.env.VITE_API_URL || (typeof window !== 'undefined' ? window.location.origin : '');
 
 function Navigation({ user, logout }) {
   const navigate = useNavigate();
