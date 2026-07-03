@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Link, useNavigate, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Link, useNavigate, Navigate, useLocation } from 'react-router-dom';
 import { LogOut, Wrench, Shield, User, HardHat, Compass, Menu, X, Building2 } from 'lucide-react';
 import { ToastProvider } from './context/ToastContext';
 import { ConfirmProvider } from './context/ConfirmContext';
@@ -91,6 +91,16 @@ function Navigation({ user, logout }) {
   );
 }
 
+function ScrollToTop() {
+  const { pathname } = useLocation();
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+  }, [pathname]);
+
+  return null;
+}
+
 function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -130,6 +140,7 @@ function App() {
     <ToastProvider>
       <ConfirmProvider>
         <Router>
+          <ScrollToTop />
           <div className="app-container">
             <Navigation user={user} logout={logout} />
             <main className="app-main">

@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import io from 'socket.io-client';
 import { Users, Hammer, CreditCard, Check, X, Trash2, ShieldAlert, UserCircle, ListChecks, Ban, ShieldCheck } from 'lucide-react';
 import { API_URL } from '../../App';
 import { useToast } from '../../context/ToastContext';
@@ -12,6 +13,7 @@ import Pagination from '../../components/shared/Pagination';
 export default function AdminDashboard({ user }) {
   const toast = useToast();
   const confirm = useConfirm();
+  const socketRef = useRef(null);
   // Statistics and States
   const [workers, setWorkers] = useState([]);
   const [customers, setCustomers] = useState([]);
@@ -29,10 +31,13 @@ export default function AdminDashboard({ user }) {
   const [workerPage, setWorkerPage] = useState(1);
   const [customerPage, setCustomerPage] = useState(1);
   const [serviceHistoryPage, setServiceHistoryPage] = useState(1);
-  const [constructionPage, setConstructionPage] = useState(1);
   const [escrowPage, setEscrowPage] = useState(1);
   const [complaintPage, setComplaintPage] = useState(1);
-
+  const [constructionPage, setConstructionPage] = useState(1);
+  const [basePrices, setBasePrices] = useState({});
+  const [selectedBidsJob, setSelectedBidsJob] = useState(null);
+  const [selectedJobBids, setSelectedJobBids] = useState([]); // bids fetched from API
+  const [bidsLoading, setBidsLoading] = useState(false);
   // Assignment states
   const [selectedWorkers, setSelectedWorkers] = useState({}); // jobId -> workerId mapping
   const [customQuote, setCustomQuote] = useState({}); // jobId -> quote amount mapping
@@ -41,10 +46,56 @@ export default function AdminDashboard({ user }) {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
   const [workerRoleFilter, setWorkerRoleFilter] = useState('all');
+  const [workerSort, setWorkerSort] = useState('newest');
 
   useEffect(() => {
     loadAdminData();
+
+    // Connect socket for real-time bid notifications
+    const socket = io(API_URL);
+    socketRef.current = socket;
+    if (user?._id) socket.emit('register', user._id);
+
+    socket.on('new_bid_received', ({ jobId, jobCategory, bid }) => {
+      console.log('[Admin Socket] new_bid_received for job', jobId, bid);
+      toast.success(`New bid from ${bid.bidderName || 'Contractor'} on ${jobCategory} — PKR ${bid.bidAmount}`);
+      // Re-fetch jobs to update contractorRequests list
+      loadAdminData();
+    });
+
+    socket.on('worker_rating_updated', (data) => {
+      setWorkers(prev => prev.map(w => w._id === data.workerId ? { ...w, averageRating: data.averageRating, totalReviews: data.totalReviews } : w));
+    });
+
+    return () => { socket.disconnect(); };
   }, []);
+
+  // Open the bids overlay for a specific project — fetches fresh data from API
+  const openBidsOverlay = async (job) => {
+    console.log('[Admin Overlay] Opening bids for project ID:', job._id);
+    setSelectedBidsJob(job);
+    setSelectedJobBids([]);
+    setBidsLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/api/jobs/${job._id}/bids`, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+      const data = await res.json();
+      console.log('[Admin Overlay] Retrieved bids:', JSON.stringify(data));
+      if (res.ok) {
+        const submittedBids = (data.bids || []).filter(b => b.status === 'accepted');
+        console.log('[Admin Overlay] Submitted bids count:', submittedBids.length);
+        setSelectedJobBids(submittedBids);
+      } else {
+        toast.error('Failed to load bids');
+      }
+    } catch (err) {
+      console.error('[Admin Overlay] Fetch error:', err);
+      toast.error('Error loading bids');
+    } finally {
+      setBidsLoading(false);
+    }
+  };
 
   const loadAdminData = async () => {
     setLoading(true);
@@ -65,8 +116,16 @@ export default function AdminDashboard({ user }) {
       const jData = await jRes.json();
       if (jRes.ok) {
         setAllJobs(jData);
-        setConstructionJobs(jData.filter(job => job.type === 'construction' && !['assigned', 'en_route', 'completed', 'pending_admin_approval'].includes(job.status)));
-        setContractorRequests(jData.filter(job => job.type === 'construction' && job.status === 'pending_admin_approval'));
+        // Construction assignment tab: pending or contractor_offers_sent (awaiting bids)
+        setConstructionJobs(jData.filter(job => job.type === 'construction' && !['assigned', 'en_route', 'completed'].includes(job.status)));
+        // Contractor requests tab: jobs where at least one bid was submitted (status=accepted in offers)
+        const jobsWithBids = jData.filter(job =>
+          job.type === 'construction' &&
+          job.status === 'contractor_offers_sent' &&
+          job.contractorOffers?.some(o => o.status === 'accepted')
+        );
+        console.log('[Admin] Jobs with submitted bids:', jobsWithBids.length, jobsWithBids.map(j => j._id));
+        setContractorRequests(jobsWithBids);
       }
 
       // Load Payment Statistics
@@ -258,7 +317,7 @@ export default function AdminDashboard({ user }) {
     }
   };
 
-  const handleJobAdminApproval = async (jobId, action) => {
+  const handleJobAdminApproval = async (jobId, action, contractorId = null) => {
     try {
       const response = await fetch(`${API_URL}/api/jobs/${jobId}/admin-approval`, {
         method: 'PUT',
@@ -266,7 +325,7 @@ export default function AdminDashboard({ user }) {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
-        body: JSON.stringify({ action })
+        body: JSON.stringify({ action, contractorId })
       });
       const data = await response.json();
       if (response.ok) {
@@ -282,8 +341,16 @@ export default function AdminDashboard({ user }) {
   };
 
   const handleSendToAllContractors = async (jobId) => {
+    const basePrice = basePrices[jobId];
+    if (!basePrice || basePrice <= 0) {
+      toast.error('Please enter a valid base price for this project.');
+      return;
+    }
     try {
-      const body = contractorCityFilter.trim() ? { city: contractorCityFilter.trim() } : {};
+      const body = { basePrice: Number(basePrice) };
+      if (contractorCityFilter.trim()) {
+        body.city = contractorCityFilter.trim();
+      }
       const response = await fetch(`${API_URL}/api/jobs/${jobId}/send-to-contractors`, {
         method: 'POST',
         headers: {
@@ -370,6 +437,13 @@ export default function AdminDashboard({ user }) {
     if (workerRoleFilter === 'contractor') return isContractorRole(worker);
     if (workerRoleFilter === 'worker') return !isContractorRole(worker);
     return true;
+  }).sort((a, b) => {
+    if (workerSort === 'highest_rated') {
+      return (b.averageRating || 0) - (a.averageRating || 0);
+    } else if (workerSort === 'lowest_rated') {
+      return (a.averageRating || 0) - (b.averageRating || 0);
+    }
+    return 0; // newest/default
   });
 
   const visibleWorkers = getPaginatedItems(filteredWorkers, workerPage);
@@ -493,11 +567,30 @@ export default function AdminDashboard({ user }) {
             />
           ) : (
             <>
+              <div style={{ display: 'flex', gap: '16px', marginBottom: '20px', alignItems: 'center' }}>
+                <div>
+                  <label className="form-label">Filter Role</label>
+                  <select className="form-input" value={workerRoleFilter} onChange={e => setWorkerRoleFilter(e.target.value)} style={{ minWidth: '150px' }}>
+                    <option value="all">All Roles</option>
+                    <option value="worker">Daily Workers</option>
+                    <option value="contractor">Contractors</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="form-label">Sort By</label>
+                  <select className="form-input" value={workerSort} onChange={e => setWorkerSort(e.target.value)} style={{ minWidth: '150px' }}>
+                    <option value="newest">Newest First</option>
+                    <option value="highest_rated">Highest Rated</option>
+                    <option value="lowest_rated">Lowest Rated</option>
+                  </select>
+                </div>
+              </div>
               <div className="data-table-wrap">
                 <table className="data-table">
                   <thead>
                     <tr style={{ borderBottom: '1px solid var(--border-grey)', color: 'var(--text-secondary)' }}>
                       <th style={{ padding: '12px' }}>Worker Name</th>
+                      <th style={{ padding: '12px' }}>Rating</th>
                       <th style={{ padding: '12px' }}>Email</th>
                       <th style={{ padding: '12px' }}>Phone</th>
                       <th style={{ padding: '12px' }}>Skills</th>
@@ -513,6 +606,19 @@ export default function AdminDashboard({ user }) {
                     {visibleWorkers.map(w => (
                       <tr key={w._id} style={{ borderBottom: '1px solid var(--border-grey)' }}>
                         <td style={{ padding: '12px', fontWeight: '700', color: '#fff' }}>{w.name}</td>
+                        <td style={{ padding: '12px' }}>
+                          {w.averageRating !== undefined ? (
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <span style={{ color: '#fbbf24' }}>★</span>
+                                <span style={{ fontWeight: 'bold' }}>{w.averageRating}</span>
+                              </div>
+                              <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{w.totalReviews} reviews</span>
+                            </div>
+                          ) : (
+                            <span style={{ color: 'var(--text-muted)' }}>No ratings</span>
+                          )}
+                        </td>
                         <td style={{ padding: '12px' }}>{w.email}</td>
                         <td style={{ padding: '12px' }}>{w.phone}</td>
                         <td style={{ padding: '12px' }}>
@@ -894,7 +1000,14 @@ export default function AdminDashboard({ user }) {
                           </td>
                           <td style={{ padding: '12px' }}>
                             {job.status === 'pending' && !job.worker ? (
-                              <>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                <input
+                                  type="number"
+                                  placeholder="Base Price (PKR)"
+                                  value={basePrices[job._id] || ''}
+                                  onChange={(e) => setBasePrices(prev => ({ ...prev, [job._id]: e.target.value }))}
+                                  style={{ padding: '8px', borderRadius: '6px', border: '1px solid var(--border-grey)', background: 'var(--bg-input)', color: '#fff', fontSize: '13px' }}
+                                />
                                 <button
                                   onClick={() => handleSendToAllContractors(job._id)}
                                   className="btn btn-primary"
@@ -904,12 +1017,12 @@ export default function AdminDashboard({ user }) {
                                     ? `Send To Contractors in ${contractorCityFilter.trim()}`
                                     : 'Send To All Contractors'}
                                 </button>
-                                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '8px' }}>
+                                <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
                                   {matchingWorkers.length > 0
                                     ? `${matchingWorkers.length} contractor${matchingWorkers.length > 1 ? 's' : ''} match${contractorCityFilter.trim() ? ' this city' : ''}`
                                     : `No matching contractors${contractorCityFilter.trim() ? ` for ${contractorCityFilter.trim()}` : ''}`}
                                 </div>
-                              </>
+                              </div>
                             ) : job.status === 'pending_admin_approval' ? (
                               <div style={{ display: 'grid', gap: '8px' }}>
                                 <button
@@ -982,42 +1095,41 @@ export default function AdminDashboard({ user }) {
                   </thead>
                   <tbody>
                     {visibleContractorRequests.map(job => (
-                      <tr key={job._id} style={{ borderBottom: '1px solid var(--border-grey)' }}>
-                        <td style={{ padding: '12px' }}>
-                          <div style={{ fontWeight: '700', color: '#fff' }}>{job.category}</div>
-                          <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }} title={job.description}>{job.description}</div>
-                        </td>
-                        <td style={{ padding: '12px' }}>
-                          <div style={{ fontWeight: '600' }}>{job.customer?.name || 'Customer'}</div>
-                          <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{job.customer?.phone || '—'}</div>
-                        </td>
-                        <td style={{ padding: '12px' }}>
-                          <div style={{ fontWeight: '600' }}>{job.worker?.name || 'Contractor'}</div>
-                          <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{job.worker?.phone || '—'}</div>
-                        </td>
-                        <td style={{ padding: '12px', fontWeight: '700' }}>{job.payment?.amount} PKR</td>
-                        <td style={{ padding: '12px' }}>
-                          <StatusBadge status={job.status} />
-                        </td>
-                        <td style={{ padding: '12px' }}>
-                          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        <tr 
+                          key={job._id} 
+                          style={{ borderBottom: '1px solid var(--border-grey)', background: 'rgba(255,107,0,0.02)', cursor: 'pointer' }}
+                          onClick={() => openBidsOverlay(job)}
+                        >
+                          <td style={{ padding: '12px' }}>
+                            <div style={{ fontWeight: '700', color: '#fff' }}>{job.category}</div>
+                            <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }} title={job.description}>{job.description}</div>
+                          </td>
+                          <td style={{ padding: '12px' }}>
+                            <div style={{ fontWeight: '600' }}>{job.customer?.name || 'Customer'}</div>
+                            <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{job.customer?.phone || '—'}</div>
+                          </td>
+                          <td style={{ padding: '12px' }}>
+                            <div style={{ fontWeight: '600', color: 'var(--primary-orange)' }}>
+                              {job.contractorOffers?.filter(o => o.status === 'accepted').length || 0} Bid(s) Submitted
+                            </div>
+                          </td>
+                          <td style={{ padding: '12px', fontWeight: '700' }}>{job.payment?.basePrice || job.payment?.amount} PKR</td>
+                          <td style={{ padding: '12px' }}>
+                            <StatusBadge status={job.status} />
+                          </td>
+                          <td style={{ padding: '12px' }}>
                             <button
-                              onClick={() => handleJobAdminApproval(job._id, 'approve')}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openBidsOverlay(job);
+                              }}
                               className="btn btn-primary"
-                              style={{ padding: '8px 16px', fontSize: '12px' }}
+                              style={{ padding: '6px 12px', fontSize: '12px' }}
                             >
-                              Approve
+                              View Bids
                             </button>
-                            <button
-                              onClick={() => handleJobAdminApproval(job._id, 'reject')}
-                              className="btn btn-secondary"
-                              style={{ padding: '8px 16px', fontSize: '12px', borderColor: 'var(--error-color)', color: 'var(--error-color)' }}
-                            >
-                              Reject
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
+                          </td>
+                        </tr>
                     ))}
                   </tbody>
                 </table>
@@ -1280,6 +1392,84 @@ export default function AdminDashboard({ user }) {
         </div>
       )}
 
+      {selectedBidsJob && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(7, 12, 24, 0.82)', zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}
+          onClick={() => { setSelectedBidsJob(null); setSelectedJobBids([]); }}
+        >
+          <div
+            style={{ width: 'min(800px, 100%)', background: 'var(--bg-card)', border: '1px solid var(--border-grey)', borderRadius: '16px', padding: '24px', boxShadow: '0 20px 60px rgba(0,0,0,0.35)', maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+              <div>
+                <h3 style={{ margin: 0, color: '#fff' }}>Bidding Requests — {selectedBidsJob.category}</h3>
+                <p style={{ margin: '4px 0 0', fontSize: '13px', color: 'var(--text-secondary)' }}>
+                  Project ID: {selectedBidsJob._id} · Budget: PKR {selectedBidsJob.payment?.basePrice || selectedBidsJob.payment?.amount}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setSelectedBidsJob(null); setSelectedJobBids([]); }}
+                style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '4px' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div style={{ overflowY: 'auto', flex: 1 }}>
+              {bidsLoading ? (
+                <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '24px' }}>Loading bids…</p>
+              ) : selectedJobBids.length === 0 ? (
+                <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '24px' }}>No bids submitted yet for this project.</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  {selectedJobBids.map((bid, idx) => (
+                    <div key={idx} style={{ background: 'var(--bg-input)', border: '1px solid var(--border-grey)', borderRadius: '12px', padding: '16px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Hammer size={16} color="var(--primary-orange)" />
+                            <span style={{ fontWeight: '700', color: '#fff', fontSize: '15px' }}>{bid.bidderName || 'Contractor'}</span>
+                          </div>
+                          <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                            Phone: {bid.bidderPhone || '—'} · City: {bid.bidderCity || '—'} · Area: {bid.bidderResidenceArea || '—'}
+                          </div>
+                          <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                            Submitted: {bid.submittedAt ? new Date(bid.submittedAt).toLocaleString() : '—'}
+                          </div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontWeight: '700', color: '#10b981', fontSize: '18px' }}>PKR {bid.bidAmount?.toLocaleString()}</div>
+                          <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>{bid.completionDays} Days Estimated</div>
+                          <StatusBadge status={bid.status} />
+                        </div>
+                      </div>
+                      {bid.notes && (
+                        <div style={{ background: 'rgba(0,0,0,0.2)', padding: '10px 12px', borderRadius: '8px', marginBottom: '14px', fontSize: '13px', color: '#d1d5db' }}>
+                          <strong style={{ fontSize: '11px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'block', marginBottom: '4px' }}>Notes</strong>
+                          {bid.notes}
+                        </div>
+                      )}
+                      <button
+                        onClick={() => {
+                          handleJobAdminApproval(selectedBidsJob._id, 'approve', bid.contractorId);
+                          setSelectedBidsJob(null);
+                          setSelectedJobBids([]);
+                        }}
+                        className="btn btn-primary"
+                        style={{ width: '100%', padding: '10px' }}
+                      >
+                        ✓ Accept This Bid — PKR {bid.bidAmount?.toLocaleString()}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </DashboardLayout>
   );
 }

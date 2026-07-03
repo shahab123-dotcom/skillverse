@@ -5,7 +5,7 @@ const bcrypt = require('bcryptjs');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const { User, Worker, Job, Message, Complaint } = require('./models');
+const { User, Worker, Job, Message, Complaint, Review } = require('./models');
 const { releaseDuePayments, releaseJobPayment, computePaymentBreakdown, refundJobPayment } = require('./escrow');
 
 async function checkAndReleasePayments() {
@@ -246,19 +246,23 @@ router.post('/workers/request-contractor', authenticateToken, async (req, res) =
   try {
     if (req.user.role !== 'worker') return res.status(403).json({ error: 'Unauthorized' });
     
-    const { companyName, experienceYears, specialization, serviceArea } = req.body;
+    const { companyName, experienceYears, specialization, serviceArea, city, residenceArea, exactLocation, latitude, longitude } = req.body;
     
     const worker = await Worker.findById(req.user.id);
     if (!worker) return res.status(404).json({ error: 'Worker not found' });
     
-    // Set/Update contractor details
     worker.contractorProfile = {
       companyName: companyName || '',
       experienceYears: Number(experienceYears) || 0,
       specialization: specialization || '',
       serviceArea: serviceArea || '',
+      city: city || '',
+      residenceArea: residenceArea || '',
+      exactLocation: exactLocation || '',
       status: 'pending' // Requires admin approval
     };
+    if (latitude) worker.latitude = Number(latitude);
+    if (longitude) worker.longitude = Number(longitude);
     
     // Also ensure they have the Contractor skill
     if (Array.isArray(worker.skills) && !worker.skills.includes('Contractor')) {
@@ -493,24 +497,31 @@ router.post('/jobs', authenticateToken, async (req, res) => {
       return res.status(403).json({ error: 'Your account is blocked. Contact admin for assistance.' });
     }
 
-    const { type, category, description, voiceUrl, voiceTranscript, location, paymentAmount } = req.body;
+    const { type, category, description, voiceUrl, voiceTranscript, location, paymentAmount, title } = req.body;
     
     if (!type || !category || !location) {
       return res.status(400).json({ error: 'Type, category and location details are required' });
     }
 
+    const trimmedManualAddress = typeof location.manualAddress === 'string' ? location.manualAddress.trim() : '';
+    const fallbackAddress = (location.address || trimmedManualAddress || 'Location not provided').trim();
+
     const newJob = new Job({
       type,
       category,
+      title: title || '',
       customer: req.user.id,
+      customerName: customer.name,
       description: description || '',
       voiceUrl: voiceUrl || '',
       voiceTranscript: voiceTranscript || '',
       location: {
         latitude: Number(location.latitude),
         longitude: Number(location.longitude),
-        address: location.address,
-        manualAddress: location.manualAddress || location.address || ''
+        address: fallbackAddress,
+        city: location.city || '',
+        residenceArea: location.residenceArea || '',
+        manualAddress: trimmedManualAddress
       },
       tracking: {
         active: false,
@@ -526,8 +537,26 @@ router.post('/jobs', authenticateToken, async (req, res) => {
     });
 
     await newJob.save();
-    
-    // Note: If type is 'daily', server.js sockets will detect this and dispatch to the nearest worker.
+    console.log('[JOB CREATED] Request object created:', {
+      requestId: newJob._id,
+      customerId: newJob.customer,
+      customerName: newJob.customerName,
+      serviceCategory: newJob.category,
+      issueDescription: newJob.description,
+      voiceIssue: {
+        voiceUrl: newJob.voiceUrl,
+        voiceTranscript: newJob.voiceTranscript
+      },
+      customerCity: newJob.location.city,
+      customerAddress: newJob.location.address,
+      customerCoordinates: {
+        latitude: newJob.location.latitude,
+        longitude: newJob.location.longitude
+      },
+      requestDate: newJob.createdAt,
+      requestStatus: newJob.status
+    });
+
     res.status(201).json({ message: 'Job request submitted successfully', job: newJob });
   } catch (error) {
     console.error('Job Creation Error:', error);
@@ -567,10 +596,46 @@ router.get('/jobs/admin', authenticateToken, async (req, res) => {
     const jobs = await Job.find()
       .populate('customer', 'name phone email')
       .populate('worker', 'name phone')
+      .populate('contractorOffers.contractorId', 'name phone contractorProfile')
       .sort({ createdAt: -1 });
+    console.log('[Admin Jobs] Loaded', jobs.length, 'jobs');
+    const constructionWithBids = jobs.filter(j => j.type === 'construction');
+    constructionWithBids.forEach(j => {
+      console.log(`[Admin Jobs] Job ${j._id} status=${j.status} offers=${j.contractorOffers?.length}`);
+    });
     res.json(jobs);
   } catch (error) {
     res.status(500).json({ error: 'Failed to retrieve jobs' });
+  }
+});
+
+// Fetch all bids for a specific construction project (Admin)
+router.get('/jobs/:id/bids', authenticateToken, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
+    const job = await Job.findById(req.params.id)
+      .populate('contractorOffers.contractorId', 'name phone contractorProfile');
+    if (!job) return res.status(404).json({ error: 'Job not found' });
+    console.log(`[Bids Fetch] Job ${req.params.id} has ${job.contractorOffers?.length} offers`);
+    const bids = (job.contractorOffers || []).map(offer => ({
+      contractorId: offer.contractorId?._id || offer.contractorId,
+      bidderName: offer.bidderName || offer.contractorId?.name || 'Unknown',
+      bidderPhone: offer.bidderPhone || offer.contractorId?.phone || '',
+      bidderCity: offer.bidderCity || offer.contractorId?.contractorProfile?.city || '',
+      bidderResidenceArea: offer.bidderResidenceArea || offer.contractorId?.contractorProfile?.residenceArea || '',
+      status: offer.status,
+      bidAmount: offer.bidAmount,
+      completionDays: offer.completionDays,
+      notes: offer.notes,
+      sentAt: offer.sentAt,
+      submittedAt: offer.submittedAt,
+      respondedAt: offer.respondedAt,
+    }));
+    console.log('[Bids Fetch] Returning bids:', JSON.stringify(bids));
+    res.json({ jobId: job._id, bids });
+  } catch (error) {
+    console.error('[Bids Fetch] Error:', error);
+    res.status(500).json({ error: 'Failed to fetch bids' });
   }
 });
 
@@ -644,8 +709,13 @@ router.post('/jobs/:id/send-to-contractors', authenticateToken, async (req, res)
       return res.status(400).json({ error: cityFilter ? `No approved contractors found for ${cityFilter}` : 'No approved contractors found' });
     }
 
+    const basePrice = req.body.basePrice ? Number(req.body.basePrice) : 0;
+
     // Update job status to indicate it's been sent to contractors
     job.status = 'contractor_offers_sent';
+    if (basePrice > 0) {
+      job.payment.basePrice = basePrice;
+    }
     job.contractorOffers = contractors.map(c => ({
       contractorId: c._id,
       status: 'pending',
@@ -691,6 +761,82 @@ router.get('/jobs/worker/construction', authenticateToken, async (req, res) => {
     res.json(jobs);
   } catch (error) {
     res.status(500).json({ error: 'Failed to load construction projects' });
+  }
+});
+
+// Contractor submits a bid for a construction project
+router.post('/jobs/:id/bid', authenticateToken, async (req, res) => {
+  try {
+    if (req.user.role !== 'worker') return res.status(403).json({ error: 'Worker access required' });
+    const { bidAmount, completionDays, notes } = req.body;
+    
+    if (!bidAmount || !completionDays) {
+      return res.status(400).json({ error: 'Bid amount and completion days are required' });
+    }
+
+    const job = await Job.findById(req.params.id);
+    if (!job) return res.status(404).json({ error: 'Job not found' });
+    
+    if (job.status !== 'contractor_offers_sent') {
+      return res.status(400).json({ error: 'This job is not accepting bids currently' });
+    }
+
+    const offerIndex = job.contractorOffers?.findIndex((offer) => String(offer.contractorId) === req.user.id);
+    console.log(`[Bid Submit] Worker=${req.user.id}, Job=${req.params.id}, offerIndex=${offerIndex}`);
+    console.log('[Bid Submit] contractorOffers:', JSON.stringify(job.contractorOffers?.map(o => ({ id: String(o.contractorId), status: o.status }))));
+    
+    if (offerIndex === -1 || offerIndex === undefined) {
+      return res.status(403).json({ error: 'You are not invited to bid on this project' });
+    }
+
+    // Fetch full worker profile to store bidder details
+    const bidderWorker = await Worker.findById(req.user.id).select('name phone contractorProfile');
+    console.log('[Bid Submit] Bidder worker:', bidderWorker?.name, bidderWorker?.contractorProfile?.city);
+
+    job.contractorOffers[offerIndex].status = 'accepted';
+    job.contractorOffers[offerIndex].bidAmount = Number(bidAmount);
+    job.contractorOffers[offerIndex].completionDays = Number(completionDays);
+    job.contractorOffers[offerIndex].notes = notes || '';
+    job.contractorOffers[offerIndex].submittedAt = new Date();
+    job.contractorOffers[offerIndex].respondedAt = new Date();
+    // Store full bidder info so admin can see without extra population
+    job.contractorOffers[offerIndex].bidderName = bidderWorker?.name || '';
+    job.contractorOffers[offerIndex].bidderPhone = bidderWorker?.phone || '';
+    job.contractorOffers[offerIndex].bidderCity = bidderWorker?.contractorProfile?.city || '';
+    job.contractorOffers[offerIndex].bidderResidenceArea = bidderWorker?.contractorProfile?.residenceArea || '';
+    
+    job.markModified('contractorOffers');
+    await job.save();
+
+    const savedBid = job.contractorOffers[offerIndex];
+    console.log('[Bid Submit] Saved bid:', JSON.stringify(savedBid));
+
+    // Emit real-time socket event to all admins
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('new_bid_received', {
+        jobId: job._id,
+        jobCategory: job.category,
+        bid: {
+          contractorId: req.user.id,
+          bidderName: savedBid.bidderName,
+          bidderCity: savedBid.bidderCity,
+          bidderResidenceArea: savedBid.bidderResidenceArea,
+          bidderPhone: savedBid.bidderPhone,
+          bidAmount: savedBid.bidAmount,
+          completionDays: savedBid.completionDays,
+          notes: savedBid.notes,
+          submittedAt: savedBid.submittedAt,
+          status: savedBid.status,
+        }
+      });
+      console.log('[Bid Submit] Socket new_bid_received emitted for job', job._id);
+    }
+
+    return res.json({ message: 'Bid submitted successfully', job });
+  } catch (error) {
+    console.error('Bid submission error:', error);
+    res.status(500).json({ error: 'Failed to submit bid' });
   }
 });
 
@@ -778,40 +924,65 @@ router.put('/jobs/:id/worker-response', authenticateToken, async (req, res) => {
 router.put('/jobs/:id/admin-approval', authenticateToken, async (req, res) => {
   try {
     if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
-    const { action } = req.body;
+    const { action, contractorId } = req.body;
+    
     if (!['approve', 'reject'].includes(action)) {
       return res.status(400).json({ error: 'Invalid action. Use: approve or reject' });
     }
 
     const job = await Job.findById(req.params.id);
     if (!job) return res.status(404).json({ error: 'Job not found' });
-    if (job.status !== 'pending_admin_approval') {
-      return res.status(400).json({ error: 'This job is not awaiting admin approval' });
-    }
-    if (!job.worker) {
-      return res.status(400).json({ error: 'No contractor has claimed this job yet' });
-    }
 
     if (action === 'approve') {
+      if (!contractorId) return res.status(400).json({ error: 'Contractor ID required for approval' });
+      
+      const offerIndex = job.contractorOffers.findIndex(o => String(o.contractorId) === contractorId);
+      if (offerIndex === -1) return res.status(404).json({ error: 'Bid not found' });
+      
+      const winningBid = job.contractorOffers[offerIndex];
+      
+      job.worker = contractorId;
       job.status = 'assigned';
+      job.payment.workerAmount = winningBid.bidAmount; // Set worker payout to bid amount
+      
+      // Set all other offers to rejected
+      job.contractorOffers = job.contractorOffers.map(o => {
+        if (String(o.contractorId) === contractorId) {
+          return { ...o.toObject(), status: 'accepted' };
+        } else {
+          return { ...o.toObject(), status: 'rejected' };
+        }
+      });
+      
       await job.save();
-      return res.json({ message: 'Construction project approved by admin', job });
+      
+      const worker = await Worker.findById(contractorId);
+      if (worker) {
+        worker.totalRequests += 1;
+        await worker.save();
+      }
+
+      return res.json({ message: 'Bid approved and contractor assigned', job });
     }
 
-    // Reject the accepted contractor and clear the assignment so admin can resend
-    const rejectedWorkerId = job.worker;
-    job.worker = null;
-    job.status = 'pending';
-    job.contractorOffers = [];
-    await job.save();
+    if (action === 'reject') {
+      // Reject the accepted contractor and clear the assignment so admin can resend
+      const rejectedWorkerId = job.worker;
+      job.worker = null;
+      job.status = 'pending';
+      job.contractorOffers = [];
+      await job.save();
 
-    const rejectedWorker = await Worker.findById(rejectedWorkerId);
-    if (rejectedWorker) {
-      rejectedWorker.totalRequests = Math.max(0, rejectedWorker.totalRequests - 1);
-      await rejectedWorker.save();
+      if (rejectedWorkerId) {
+        const rejectedWorker = await Worker.findById(rejectedWorkerId);
+        if (rejectedWorker) {
+          rejectedWorker.totalRequests = Math.max(0, rejectedWorker.totalRequests - 1);
+          await rejectedWorker.save();
+        }
+      }
+
+      return res.json({ message: 'Construction project rejected by admin and reset to pending', job });
     }
-
-    return res.json({ message: 'Construction project rejected by admin and reset to pending', job });
   } catch (error) {
     console.error('Admin approval error:', error);
     res.status(500).json({ error: 'Failed to process admin approval' });
@@ -938,11 +1109,19 @@ router.put('/jobs/:id/cancel', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Job cannot be cancelled' });
     }
 
+    const shouldRefund = job.payment?.status === 'paid' && !job.worker;
+    const previousWorker = job.worker;
+
+    if (shouldRefund) {
+      await refundJobPayment(job, { refundAmount: job.payment.amount || 0 });
+    }
+
+    job.worker = null;
     job.status = 'cancelled';
     await job.save();
 
-    if (job.worker) {
-      await Worker.findByIdAndUpdate(job.worker, { isAvailable: true });
+    if (previousWorker) {
+      await Worker.findByIdAndUpdate(previousWorker, { isAvailable: true });
     }
 
     const io = req.app.get('io');
@@ -950,7 +1129,10 @@ router.put('/jobs/:id/cancel', authenticateToken, async (req, res) => {
       io.emit('job_cancelled', { jobId: String(job._id) });
     }
 
-    res.json({ message: 'Job cancelled successfully', job });
+    res.json({
+      message: shouldRefund ? 'Job cancelled successfully and payment refunded.' : 'Job cancelled successfully',
+      job
+    });
   } catch (error) {
     res.status(500).json({ error: 'Failed to cancel job' });
   }
@@ -1231,6 +1413,123 @@ router.put('/admin/complaints/:id/resolve', authenticateToken, async (req, res) 
   } catch (error) {
     console.error('Resolve Complaint Error:', error);
     res.status(500).json({ error: 'Failed to resolve complaint' });
+  }
+});
+
+// --- RATING & FEEDBACK ROUTES ---
+
+// Submit a review for a completed job (Customer)
+router.post('/jobs/:id/review', authenticateToken, async (req, res) => {
+  try {
+    if (req.user.role !== 'customer') {
+      return res.status(403).json({ error: 'Only customers can submit reviews' });
+    }
+
+    const { rating, feedback } = req.body;
+    const ratingNum = Number(rating);
+
+    if (!ratingNum || ratingNum < 1 || ratingNum > 5) {
+      return res.status(400).json({ error: 'Rating must be a number between 1 and 5' });
+    }
+
+    const job = await Job.findById(req.params.id);
+    if (!job) return res.status(404).json({ error: 'Job not found' });
+    
+    if (String(job.customer) !== req.user.id) {
+      return res.status(403).json({ error: 'This is not your job' });
+    }
+
+    if (job.status !== 'completed') {
+      return res.status(400).json({ error: 'Feedback can only be submitted for completed jobs' });
+    }
+
+    if (job.isReviewed) {
+      return res.status(400).json({ error: 'Feedback already submitted for this job' });
+    }
+
+    if (!job.worker) {
+      return res.status(400).json({ error: 'No worker assigned to this job' });
+    }
+
+    // Create the review
+    const newReview = new Review({
+      worker: job.worker,
+      job: job._id,
+      customer: req.user.id,
+      rating: ratingNum,
+      feedback: feedback || ''
+    });
+    await newReview.save();
+
+    // Mark job as reviewed
+    job.isReviewed = true;
+    await job.save();
+
+    // Recalculate average rating for the worker
+    const allReviews = await Review.find({ worker: job.worker });
+    const totalReviews = allReviews.length;
+    const totalStarSum = allReviews.reduce((sum, rev) => sum + rev.rating, 0);
+    const averageRating = totalReviews > 0 ? (totalStarSum / totalReviews) : 0;
+
+    // Update worker
+    const updatedWorker = await Worker.findByIdAndUpdate(
+      job.worker,
+      { 
+        averageRating: parseFloat(averageRating.toFixed(1)),
+        totalReviews 
+      },
+      { new: true }
+    );
+
+    // Emit live update event
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('worker_rating_updated', {
+        workerId: String(job.worker),
+        averageRating: updatedWorker.averageRating,
+        totalReviews: updatedWorker.totalReviews,
+        latestReview: newReview
+      });
+    }
+
+    res.json({ message: 'Feedback submitted successfully', review: newReview, worker: updatedWorker });
+  } catch (error) {
+    console.error('Submit Review Error:', error);
+    res.status(500).json({ error: 'Failed to submit review' });
+  }
+});
+
+// Fetch reviews for the currently logged-in worker
+router.get('/workers/me/reviews', authenticateToken, async (req, res) => {
+  try {
+    if (req.user.role !== 'worker') {
+      return res.status(403).json({ error: 'Worker access required' });
+    }
+
+    const reviews = await Review.find({ worker: req.user.id })
+      .populate('customer', 'name')
+      .sort({ createdAt: -1 })
+      .limit(20);
+
+    res.json(reviews);
+  } catch (error) {
+    console.error('Fetch My Reviews Error:', error);
+    res.status(500).json({ error: 'Failed to fetch reviews' });
+  }
+});
+
+// Fetch recent reviews for a worker (Worker dashboard / Public view)
+router.get('/workers/:id/reviews', authenticateToken, async (req, res) => {
+  try {
+    const reviews = await Review.find({ worker: req.params.id })
+      .populate('customer', 'name')
+      .sort({ createdAt: -1 })
+      .limit(20);
+
+    res.json(reviews);
+  } catch (error) {
+    console.error('Fetch Reviews Error:', error);
+    res.status(500).json({ error: 'Failed to fetch reviews' });
   }
 });
 

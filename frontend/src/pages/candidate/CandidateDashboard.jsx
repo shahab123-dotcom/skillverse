@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import io from 'socket.io-client';
-import { Mic, MicOff, Send, Phone, MapPin, CheckCircle, CreditCard, Play, MessageSquare, ShieldAlert, Clock, Navigation, Route, X } from 'lucide-react';
+import { Mic, MicOff, Send, Phone, MapPin, CheckCircle, CreditCard, Play, MessageSquare, ShieldAlert, Clock, X } from 'lucide-react';
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import { API_URL } from '../../App';
-import LiveTrackingMap from '../../components/shared/LiveTrackingMap';
 import { useToast } from '../../context/ToastContext';
 import DashboardLayout from '../../components/shared/DashboardLayout';
 import CandidateSidebar from '../../components/candidate/CandidateSidebar';
@@ -40,27 +40,36 @@ export default function CustomerDashboard({ user }) {
   const [uploadingVoice, setUploadingVoice] = useState(false);
   const [voiceTranscript, setVoiceTranscript] = useState('');
 
-  // Active Job Match & Sockets Tracking
+  // Active Job Match & Location Tracking
   const [activeJob, setActiveJob] = useState(null);
   const [dispatchStatus, setDispatchStatus] = useState(''); // 'searching', 'accepted', 'declined', 'failed', 'completed'
   const [workerDetails, setWorkerDetails] = useState(null);
   const [workerCoords, setWorkerCoords] = useState(null);
   const [distanceToWorker, setDistanceToWorker] = useState(null);
   const [etaMinutes, setEtaMinutes] = useState(null);
-  const [trackingDistance, setTrackingDistance] = useState(null);
-  const [trackingEta, setTrackingEta] = useState(null);
+  const [socketConnectionStatus, setSocketConnectionStatus] = useState('connected');
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [complaints, setComplaints] = useState([]);
   const [complaintMap, setComplaintMap] = useState({});
   const [complaintModalJob, setComplaintModalJob] = useState(null);
   const [showComplaintModal, setShowComplaintModal] = useState(false);
   const [highlightRect, setHighlightRect] = useState(null);
-  
+
+  // Feedback State
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [feedbackJob, setFeedbackJob] = useState(null);
+  const [feedbackRating, setFeedbackRating] = useState(5);
+  const [feedbackText, setFeedbackText] = useState('');
+  const [submittingFeedback, setSubmittingFeedback] = useState(false);
+  // Completion modal state
+  const [showCompletionModal, setShowCompletionModal] = useState(false);
+  const [completionJob, setCompletionJob] = useState(null);
+
   const categoryRef = useRef(null);
   const requestRef = useRef(null);
-  const trackingRef = useRef(null);
   const paymentRef = useRef(null);
   const chatRef = useRef(null);
+  const connectionIssueRef = useRef(false);
   
   // Chat state
   const [messages, setMessages] = useState([]);
@@ -84,12 +93,16 @@ export default function CustomerDashboard({ user }) {
   const itemsPerPage = 10;
   const [historyPage, setHistoryPage] = useState(1);
 
-  // Newly Construction Form
   const [conCategory, setConCategory] = useState('');
   const [conTitle, setConTitle] = useState('');
   const [conBudget, setConBudget] = useState('');
   const [conDescription, setConDescription] = useState('');
-  const [conAddress, setConAddress] = useState('Clifton Block 5, Karachi');
+  const [conCity, setConCity] = useState('');
+  const [conResidenceArea, setConResidenceArea] = useState('');
+  const [conExactLocation, setConExactLocation] = useState('');
+  const [conLocationHint, setConLocationHint] = useState('');
+
+  const pakCities = ['Lahore', 'Karachi', 'Islamabad', 'Rahim Yar Khan', 'Multan', 'Faisalabad', 'Rawalpindi', 'Bahawalpur'];
 
   // Fetch real GPS coordinates from browser
   const fetchLocation = () => {
@@ -127,33 +140,47 @@ export default function CustomerDashboard({ user }) {
     return 'Address not provided';
   };
 
-  const updateTrackingStats = (coords) => {
-    if (!activeJob?.location?.latitude || !activeJob?.location?.longitude || !coords?.latitude || !coords?.longitude) {
-      return;
-    }
+  const resolveConstructionLocation = () => {
+    return new Promise((resolve) => {
+      const fallbackAddress = conExactLocation.trim() || 'Location not provided';
+      const fallbackLocation = {
+        latitude: latitude || 24.8607,
+        longitude: longitude || 67.0011,
+        address: fallbackAddress
+      };
 
-    const toLat = Number(activeJob.location.latitude);
-    const toLon = Number(activeJob.location.longitude);
-    const fromLat = Number(coords.latitude);
-    const fromLon = Number(coords.longitude);
-    const R = 6371;
-    const dLat = (toLat - fromLat) * Math.PI / 180;
-    const dLon = (toLon - fromLon) * Math.PI / 180;
-    const a = Math.sin(dLat / 2) ** 2 + Math.cos(fromLat * Math.PI / 180) * Math.cos(toLat * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    const distance = R * c;
+      if (!navigator.geolocation) {
+        setConLocationHint('Geolocation is unavailable, so the saved location will be used.');
+        resolve(fallbackLocation);
+        return;
+      }
 
-    setTrackingDistance(distance);
-    setTrackingEta(Math.max(1, Math.round(distance * 5)));
-    setDistanceToWorker(distance);
-    setEtaMinutes(Math.max(1, Math.round(distance * 5)));
+      setGpsLoading(true);
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const lat = position.coords.latitude;
+          const lon = position.coords.longitude;
+          const gpsAddress = `${lat.toFixed(5)}, ${lon.toFixed(5)} (GPS)`;
+          setLatitude(lat);
+          setLongitude(lon);
+          setConExactLocation((current) => current.trim() ? current : gpsAddress);
+          setConLocationHint('Using your current location for this construction request.');
+          setGpsLoading(false);
+          resolve({
+            latitude: lat,
+            longitude: lon,
+            address: conExactLocation.trim() || gpsAddress
+          });
+        },
+        () => {
+          setConLocationHint('Using the saved location because current location access was denied.');
+          setGpsLoading(false);
+          resolve(fallbackLocation);
+        },
+        { enableHighAccuracy: true, timeout: 10000 }
+      );
+    });
   };
-
-  useEffect(() => {
-    if (workerCoords) {
-      updateTrackingStats(workerCoords);
-    }
-  }, [workerCoords, activeJob?.location?.latitude, activeJob?.location?.longitude]);
 
   // Fetch GPS on component mount
   useEffect(() => {
@@ -172,7 +199,7 @@ export default function CustomerDashboard({ user }) {
 
   useEffect(() => {
     if (!showTutorial) return;
-    const stepRefs = [categoryRef, requestRef, trackingRef, paymentRef, chatRef];
+    const stepRefs = [categoryRef, requestRef, paymentRef, chatRef];
     const current = stepRefs[tutorialStep - 1]?.current;
     if (!current) return;
     const rect = current.getBoundingClientRect();
@@ -212,11 +239,17 @@ export default function CustomerDashboard({ user }) {
         setJobsHistory(data);
         setHistoryPage(1);
         loadComplaints();
-        // Check if there is an active job currently pending or en-route
+        // Check if there is an active job currently pending, assigned, or en-route
         const currentActive = data.find(job => ['pending', 'assigned', 'en_route'].includes(job.status));
         if (currentActive) {
           setActiveJob(currentActive);
-          setDispatchStatus(currentActive.status === 'pending' ? 'searching' : 'accepted');
+          if (currentActive.status === 'pending') {
+            setDispatchStatus('searching');
+          } else if (currentActive.status === 'completed') {
+            setDispatchStatus('completed');
+          } else {
+            setDispatchStatus('accepted');
+          }
           if (currentActive.worker && currentActive.worker.latitude !== undefined && currentActive.worker.longitude !== undefined) {
             setWorkerDetails(currentActive.worker);
             setWorkerCoords({
@@ -224,8 +257,10 @@ export default function CustomerDashboard({ user }) {
               longitude: currentActive.worker.longitude
             });
           }
-          // Set up socket connection for active job
-          setupSocket(currentActive._id);
+          // Set up socket connection for active jobs that still need worker match or tracking
+          if (['pending', 'assigned', 'en_route'].includes(currentActive.status)) {
+            setupSocket(currentActive._id, currentActive.status === 'pending');
+          }
         }
       }
     } catch (error) {
@@ -266,6 +301,7 @@ export default function CustomerDashboard({ user }) {
     if (data?.job) {
       setActiveJob(data.job);
     }
+    setActiveTab('history');
   };
 
   const openComplaintModal = (job) => {
@@ -279,22 +315,50 @@ export default function CustomerDashboard({ user }) {
     loadHistory();
   };
 
-  // Setup sockets
-  const setupSocket = (jobId) => {
+  // Setup sockets. If shouldDispatch=true, sends request_job_dispatch once the socket connects
+  const setupSocket = (jobId, shouldDispatch = false) => {
     if (socketRef.current) socketRef.current.disconnect();
 
-    const socket = io(API_URL);
+    connectionIssueRef.current = false;
+    let dispatched = false; // Guard: only dispatch once per connection setup
+    const socket = io(API_URL, {
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000
+    });
     socketRef.current = socket;
 
-    socket.emit('register', user.id);
-    socket.emit('join_job', jobId);
+    socket.on('connect', () => {
+      // Re-register and re-join on every connect/reconnect
+      socket.emit('register', String(user.id));
+      socket.emit('join_job', jobId);
+      // Only dispatch once on the initial connection (not on reconnects)
+      if (shouldDispatch && !dispatched) {
+        dispatched = true;
+        console.log('[Customer Socket] Dispatching service request job', jobId);
+        socket.emit('request_job_dispatch', { jobId });
+      }
+      setSocketConnectionStatus('connected');
+      if (connectionIssueRef.current) {
+        toast.success('Connection restored.');
+        connectionIssueRef.current = false;
+      }
+    });
 
     socket.on('connect_error', () => {
-      toast.error('Connection lost. Tracking updates may pause until the network reconnects.');
+      setSocketConnectionStatus('reconnecting');
+      if (!connectionIssueRef.current) {
+        toast.error('Connection lost. Updates may pause until the network reconnects.');
+        connectionIssueRef.current = true;
+      }
     });
 
     socket.on('disconnect', () => {
-      toast.info('Tracking connection temporarily disconnected.');
+      setSocketConnectionStatus('disconnected');
+      if (!connectionIssueRef.current) {
+        toast.info('Connection temporarily disconnected.');
+        connectionIssueRef.current = true;
+      }
     });
 
     // Listen for worker accepted
@@ -311,16 +375,45 @@ export default function CustomerDashboard({ user }) {
     // Listen for real time worker location updates
     socket.on('worker_location_updated', (coords) => {
       setWorkerCoords(coords);
-      updateTrackingStats(coords);
     });
 
     // Listen for job status change
     socket.on('job_status_updated', ({ status }) => {
-      setDispatchStatus(status === 'completed' ? 'completed' : 'accepted');
-      setActiveJob(prev => prev ? { ...prev, status } : prev);
+      // When job completes, snapshot the job then fully clear active state and show completion UI
       if (status === 'completed') {
-        loadHistory();
+        try {
+          const snapshot = activeJob ? { ...activeJob, status: 'completed' } : null;
+          if (snapshot) setCompletionJob(snapshot);
+          setDispatchStatus('completed');
+          // Show completion modal
+          setShowCompletionModal(true);
+          // Clear active job and related tracking immediately
+          clearActiveJobCompletely(snapshot);
+          return;
+        } catch (err) {
+          console.error('Error handling completed status:', err);
+        }
       }
+
+      // For other status updates keep updating the active job state
+      setDispatchStatus('accepted');
+      setActiveJob(prev => prev ? { ...prev, status } : prev);
+    });
+
+    // Listen for worker rating update
+    socket.on('worker_rating_updated', (data) => {
+      setWorkerDetails(prev => {
+        if (prev && prev._id === data.workerId) {
+          return { ...prev, averageRating: data.averageRating, totalReviews: data.totalReviews };
+        }
+        return prev;
+      });
+      setJobsHistory(prev => prev.map(job => {
+        if (job.worker && job.worker._id === data.workerId) {
+          return { ...job, worker: { ...job.worker, averageRating: data.averageRating, totalReviews: data.totalReviews } };
+        }
+        return job;
+      }));
     });
 
     // Listen for incoming messages
@@ -331,19 +424,22 @@ export default function CustomerDashboard({ user }) {
     // Listen for failed matches
     socket.on('dispatch_failed', (data) => {
       setDispatchStatus('failed');
-      toast.info(data.message);
+      toast.error(data.message || 'No workers available. You can retry.');
     });
 
     // Listen for job rejection (by worker or customer)
     socket.on('job_rejected', (data) => {
-      resetActiveJobState();
-      toast.info('Job has been rejected and returned to pending');
+      // Clear active job and return customer to the booking screen
+      const snapshot = activeJob ? { ...activeJob } : null;
+      clearActiveJobCompletely(snapshot);
+      toast.info('Job has been rejected and cleared');
       loadHistory();
     });
 
     // Listen for job cancellation (by customer)
     socket.on('job_cancelled', (data) => {
-      resetActiveJobState();
+      const snapshot = activeJob ? { ...activeJob } : null;
+      clearActiveJobCompletely(snapshot);
       toast.info('Job has been cancelled');
       loadHistory();
     });
@@ -363,6 +459,60 @@ export default function CustomerDashboard({ user }) {
       if (socketRef.current) socketRef.current.disconnect();
     };
   }, []);
+
+  // Helper: fully clear active job state, stop sockets and any geolocation watchers
+  const clearActiveJobCompletely = (keepJobSnapshot = null) => {
+    try {
+      // store snapshot for UI (feedback/completion modal) if provided
+      if (keepJobSnapshot) setCompletionJob(keepJobSnapshot);
+
+      // Disconnect and remove socket listeners
+      if (socketRef.current) {
+        try { socketRef.current.removeAllListeners(); } catch (e) { /* ignore */ }
+        try { socketRef.current.disconnect(); } catch (e) { /* ignore */ }
+        socketRef.current = null;
+      }
+
+      // Clear all active-job related state
+      setActiveJob(null);
+      setDispatchStatus('');
+      setWorkerDetails(null);
+      setWorkerCoords(null);
+      setDistanceToWorker(null);
+      setEtaMinutes(null);
+      setMessages([]);
+      setShowPaymentModal(false);
+      setShowFeedbackModal(false);
+      setFeedbackJob(null);
+
+      // Stop any geolocation watch if set on window (defensive)
+      try {
+        const watchId = window.__skillsverse_location_watch_id;
+        if (watchId && navigator.geolocation && navigator.geolocation.clearWatch) {
+          navigator.geolocation.clearWatch(watchId);
+        }
+        delete window.__skillsverse_location_watch_id;
+      } catch (e) {
+        // ignore
+      }
+
+      // Clear commonly-used active job keys from storage (if used)
+      try {
+        localStorage.removeItem('activeJob');
+        localStorage.removeItem('skillsverse_active_job');
+        localStorage.removeItem('currentActiveJobId');
+        localStorage.removeItem('active_job');
+        sessionStorage.removeItem('activeJob');
+      } catch (e) {
+        // ignore
+      }
+
+      // Reset UI to main booking view
+      setActiveTab('daily');
+    } catch (err) {
+      console.error('Error clearing active job state:', err);
+    }
+  };
 
   // Calculate distance and ETA when worker coordinates update
   useEffect(() => {
@@ -527,8 +677,9 @@ export default function CustomerDashboard({ user }) {
 
     const trimmedAddress = address.trim();
     const trimmedManualAddress = manualAddress.trim();
-    if (!trimmedManualAddress) {
-      return toast.warning('Please enter your address in the manual address field.');
+    const hasAddressDetails = trimmedAddress || trimmedManualAddress;
+    if (!hasAddressDetails) {
+      return toast.warning('Please enter a service location or manual address before submitting.');
     }
 
     let finalAudioUrl = audioUrl;
@@ -564,11 +715,18 @@ export default function CustomerDashboard({ user }) {
     }
 
     try {
+      const token = localStorage.getItem('token');
+      if (!token || token === 'undefined' || token === 'null') {
+        toast.error('Authentication token missing. Please sign in again.');
+        window.location.href = '/auth';
+        return;
+      }
+
       const response = await fetch(`${API_URL}/api/jobs`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
           type: 'daily',
@@ -579,7 +737,7 @@ export default function CustomerDashboard({ user }) {
           location: {
             latitude,
             longitude,
-            address: trimmedAddress,
+            address: trimmedAddress || trimmedManualAddress || 'Location not provided',
             manualAddress: trimmedManualAddress
           },
           paymentAmount: 1500 // PKR flat rate
@@ -588,17 +746,22 @@ export default function CustomerDashboard({ user }) {
 
       const data = await response.json();
       if (response.ok) {
+        console.log('[Customer] Service request created', data.job);
         setActiveJob(data.job);
         setDispatchStatus('searching');
-        setupSocket(data.job._id);
-
-        // Emit request_job_dispatch via socket
-        socketRef.current.emit('request_job_dispatch', { jobId: data.job._id });
+        // Pass shouldDispatch=true: request_job_dispatch fires once socket connects
+        setupSocket(data.job._id, true);
       } else {
+        if (response.status === 401 || response.status === 403) {
+          toast.error('Session invalid. Please sign in again.');
+          window.location.href = '/auth';
+          return;
+        }
         toast.error(data.error || 'Booking failed.');
       }
     } catch (error) {
       console.error("Booking Error:", error);
+      toast.error('Booking failed due to a network error. Please try again.');
     }
   };
 
@@ -658,11 +821,13 @@ export default function CustomerDashboard({ user }) {
   // Construction Submission
   const handleConstructionSubmit = async (e) => {
     e.preventDefault();
-    if (!conCategory || !conTitle || !conDescription) {
+    if (!conCategory || !conTitle || !conDescription || !conCity || !conResidenceArea) {
       return toast.warning('Please fill all required fields');
     }
 
     try {
+      const constructionLocation = await resolveConstructionLocation();
+
       const response = await fetch(`${API_URL}/api/jobs`, {
         method: 'POST',
         headers: {
@@ -670,16 +835,20 @@ export default function CustomerDashboard({ user }) {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
         body: JSON.stringify({
-          type: 'construction',
-          category: conCategory,
-          description: `Title: ${conTitle}. Description: ${conDescription}`,
-          location: {
-            latitude: latitude || 24.8607,
-            longitude: longitude || 67.0011,
-            address: conAddress
-          },
-          paymentAmount: Number(conBudget)
-        })
+            type: 'construction',
+            title: conTitle,
+            category: conCategory,
+            description: conDescription,
+            location: {
+              latitude: constructionLocation.latitude,
+              longitude: constructionLocation.longitude,
+              address: constructionLocation.address,
+              city: conCity,
+              residenceArea: conResidenceArea,
+              manualAddress: conExactLocation
+            },
+            paymentAmount: Number(conBudget)
+          })
       });
 
       if (response.ok) {
@@ -688,6 +857,9 @@ export default function CustomerDashboard({ user }) {
         setConTitle('');
         setConDescription('');
         setConBudget('');
+        setConCity('');
+        setConResidenceArea('');
+        setConExactLocation('');
         setActiveTab('history');
         loadHistory();
       } else {
@@ -700,12 +872,14 @@ export default function CustomerDashboard({ user }) {
   };
 
   // Cancel Job (For retry or cancel match)
-  const resetActiveJobState = () => {
+  const resetActiveJobState = (nextTab = 'history') => {
     setActiveJob(null);
     setDispatchStatus('');
     setWorkerDetails(null);
     setWorkerCoords(null);
     setMessages([]);
+    setSocketConnectionStatus('connected');
+    setActiveTab(nextTab);
     if (socketRef.current) socketRef.current.disconnect();
   };
 
@@ -746,7 +920,8 @@ export default function CustomerDashboard({ user }) {
       const data = await response.json();
       if (response.ok) {
         toast.success('Job rejected successfully');
-        resetActiveJobState();
+        resetActiveJobState('history');
+        setActiveTab('history');
         loadHistory();
       } else {
         toast.error(data.error || 'Failed to reject job');
@@ -771,14 +946,54 @@ export default function CustomerDashboard({ user }) {
       const data = await response.json();
       if (response.ok) {
         toast.success('Job marked as completed');
+        setActiveJob(data.job || activeJob);
         setDispatchStatus('completed');
-        setActiveJob(data.job);
+        setFeedbackJob(data.job || activeJob);
+        setFeedbackRating(5);
+        setFeedbackText('');
+        setShowFeedbackModal(true);
       } else {
         toast.error(data.error || 'Failed to complete job');
       }
     } catch (error) {
       console.error('Failed to complete job:', error);
       toast.error('Failed to complete job');
+    }
+  };
+
+  const handleFeedbackSubmit = async (e) => {
+    e.preventDefault();
+    if (!feedbackJob) return;
+
+    setSubmittingFeedback(true);
+    try {
+      const response = await fetch(`${API_URL}/api/jobs/${feedbackJob._id}/review`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({ rating: feedbackRating, feedback: feedbackText })
+      });
+      const data = await response.json();
+      if (response.ok) {
+        toast.success('Feedback submitted successfully!');
+        setShowFeedbackModal(false);
+        setFeedbackJob(null);
+        setActiveJob(prev => prev ? { ...prev, isReviewed: true } : prev);
+        if (activeJob?.status === 'completed' && activeJob.payment?.status !== 'paid') {
+          setShowPaymentModal(true);
+        } else {
+          setActiveTab('history');
+        }
+      } else {
+        toast.error(data.error || 'Failed to submit feedback');
+      }
+    } catch (error) {
+      console.error('Submit feedback error:', error);
+      toast.error('Failed to submit feedback');
+    } finally {
+      setSubmittingFeedback(false);
     }
   };
 
@@ -956,7 +1171,7 @@ export default function CustomerDashboard({ user }) {
                     )}
 
                     <div style={{ marginTop: '18px' }}>
-                      <label className="form-label">Manual Address *</label>
+                      <label className="form-label">Manual Address (Optional)</label>
                       <input
                         type="text"
                         name="manualAddress"
@@ -964,11 +1179,10 @@ export default function CustomerDashboard({ user }) {
                         value={manualAddress}
                         onChange={(e) => setManualAddress(e.target.value)}
                         className="form-input"
-                        required
                         style={{ height: '54px' }}
                       />
                       <span style={{ display: 'block', fontSize: '11px', color: 'var(--text-secondary)', marginTop: '6px' }}>
-                        This is the address workers will use to find you.
+                        Leave this blank if the service location above is enough for the worker.
                       </span>
                     </div>
                   </div>
@@ -998,131 +1212,98 @@ export default function CustomerDashboard({ user }) {
               </div>
             </>
           ) : (
-            /* Active Job Matching or tracking */
-            <div className="card job-tracking-grid card--padded">
-              
-              {/* Map Tracker Column */}
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                  <div>
-                    <h3 style={{ fontSize: '20px' }}>Real-Time Worker GPS Tracker</h3>
-                    <p style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>Category: <strong>{activeJob.category}</strong></p>
+            <>
+            {/* Active Job Matching or tracking */}
+            <div className="card card--padded">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                <div>
+                  <h3 style={{ fontSize: '20px' }}>Job Request Status</h3>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>Category: <strong>{activeJob.category}</strong></p>
+                </div>
+
+                {dispatchStatus === 'searching' && <StatusBadge status="searching" label="Searching Workers..." />}
+                {dispatchStatus === 'accepted' && <StatusBadge status="accepted" label="Worker Assigned" />}
+                {dispatchStatus === 'completed' && <StatusBadge status="completed" label="Job Completed" />}
+                {dispatchStatus === 'failed' && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <StatusBadge status="cancelled" label="No Workers Found" />
+                    <button
+                      className="btn btn-primary"
+                      style={{ padding: '6px 14px', fontSize: '12px' }}
+                      onClick={() => {
+                        setDispatchStatus('searching');
+                        setupSocket(activeJob._id, true);
+                      }}
+                    >
+                      🔄 Retry
+                    </button>
                   </div>
-                  
-                  {dispatchStatus === 'searching' && <StatusBadge status="searching" label="Searching Workers..." />}
-                  {dispatchStatus === 'accepted' && <StatusBadge status="accepted" label="Worker Assigned" />}
-                  {dispatchStatus === 'completed' && <StatusBadge status="completed" label="Job Completed" />}
+                )}
+              </div>
+
+              {/* Location Cards */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
+                {/* Customer Location */}
+                <div style={{ background: 'var(--bg-input)', padding: '20px', borderRadius: '14px', border: '1px solid var(--border-grey)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+                    <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px' }}>🏠</div>
+                    <span style={{ fontWeight: '700', color: '#fff', fontSize: '14px' }}>Your Location</span>
+                  </div>
+                  <p style={{ fontSize: '13px', color: '#fff', fontWeight: '600', marginBottom: '6px' }}>
+                    {getDisplayAddress(activeJob.location)}
+                  </p>
+                  <p style={{ fontSize: '11px', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
+                    GPS: {latitude.toFixed(5)}, {longitude.toFixed(5)}
+                  </p>
                 </div>
 
-                {/* Real OpenStreetMap Map via Leaflet */}
-                <div style={{ height: '380px', width: '100%', borderRadius: '20px', overflow: 'hidden', border: '1px solid var(--border-grey)', position: 'relative' }}>
-                  {dispatchStatus === 'searching' && (
-                    <div 
-                      style={{
-                        position: 'absolute',
-                        top: 0,
-                        left: 0,
-                        width: '100%',
-                        height: '100%',
-                        background: 'rgba(12, 12, 14, 0.85)',
-                        zIndex: 999,
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '12px'
-                      }}
-                    >
-                      <div 
-                        style={{
-                          width: '80px',
-                          height: '80px',
-                          border: '2px solid var(--primary-orange)',
-                          borderRadius: '50%',
-                          animation: 'pulseMic 1.5s infinite',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center'
-                        }}
-                      >
-                        <span style={{ fontSize: '11px', color: 'var(--primary-orange)', fontWeight: 700 }}>GPS SCAN</span>
-                      </div>
-                      <span style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>Pinging nearest available workers...</span>
+                {/* Worker Location */}
+                {dispatchStatus === 'searching' && (
+                  <div style={{ background: 'var(--bg-input)', padding: '20px', borderRadius: '14px', border: '1px solid var(--border-grey)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', textAlign: 'center' }}>
+                    <div style={{ width: '50px', height: '50px', border: '2px solid var(--primary-orange)', borderRadius: '50%', animation: 'pulseMic 1.5s infinite', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <span style={{ fontSize: '10px', color: 'var(--primary-orange)', fontWeight: 700 }}>SCAN</span>
                     </div>
-                  )}
+                    <span style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>Pinging nearest available workers...</span>
+                  </div>
+                )}
 
-                  {/* Tracking Info Overlay */}
-                  {dispatchStatus === 'accepted' && workerCoords && (
-                    <div 
-                      style={{
-                        position: 'absolute',
-                        top: '12px',
-                        left: '12px',
-                        right: '12px',
-                        background: 'rgba(12, 12, 14, 0.9)',
-                        backdropFilter: 'blur(10px)',
-                        borderRadius: '12px',
-                        padding: '12px 16px',
-                        zIndex: 1000,
-                        border: '1px solid rgba(255, 255, 255, 0.1)',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        gap: '12px'
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <div style={{ 
-                          width: '40px', 
-                          height: '40px', 
-                          borderRadius: '50%', 
-                          background: 'linear-gradient(135deg, var(--primary-orange), #ff6b35)',
-                          display: 'flex', 
-                          alignItems: 'center', 
-                          justifyContent: 'center' 
-                        }}>
-                          <Navigation size={20} color="#fff" />
-                        </div>
-                        <div>
-                          <div style={{ fontSize: '14px', fontWeight: '700', color: '#fff' }}>
-                            {workerDetails?.name || 'Worker'} is on the way
-                          </div>
-                          <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                            {distanceToWorker !== null ? `${distanceToWorker.toFixed(1)} km away` : 'Calculating distance...'}
-                          </div>
-                        </div>
-                      </div>
-                      <div style={{ 
-                        background: 'rgba(34, 197, 94, 0.15)', 
-                        border: '1px solid rgba(34, 197, 94, 0.3)', 
-                        borderRadius: '8px', 
-                        padding: '8px 12px',
-                        textAlign: 'center'
-                      }}>
-                        <div style={{ fontSize: '11px', color: '#86efac', textTransform: 'uppercase', letterSpacing: '0.05em' }}>ETA</div>
-                        <div style={{ fontSize: '18px', fontWeight: '700', color: '#fff' }}>
-                          {etaMinutes !== null ? `${etaMinutes} min` : '--'}
-                        </div>
-                      </div>
+                {dispatchStatus === 'accepted' && workerCoords && (
+                  <div style={{ background: 'var(--bg-input)', padding: '20px', borderRadius: '14px', border: '1px solid rgba(255,107,0,0.25)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+                      <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'rgba(255,107,0,0.15)', border: '1px solid rgba(255,107,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px' }}>👷</div>
+                      <span style={{ fontWeight: '700', color: '#fff', fontSize: '14px' }}>Assigned Worker</span>
                     </div>
-                  )}
+                    <p style={{ fontSize: '14px', color: '#fff', fontWeight: '700', marginBottom: '6px' }}>
+                      {workerDetails?.name || 'Worker'}
+                    </p>
+                    <p style={{ fontSize: '11px', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
+                      GPS: {Number(workerCoords.latitude).toFixed(5)}, {Number(workerCoords.longitude).toFixed(5)}
+                    </p>
+                  </div>
+                )}
+              </div>
 
-                  <LiveTrackingMap
-                    role="customer"
-                    customerLocation={{ latitude, longitude }}
-                    workerLocation={workerCoords}
-                    onRouteInfo={({ distanceKm, etaMinutes }) => {
-                      if (distanceKm !== null && etaMinutes !== null) {
-                        setTrackingDistance(distanceKm);
-                        setTrackingEta(etaMinutes);
-                        setDistanceToWorker(distanceKm);
-                        setEtaMinutes(etaMinutes);
-                      }
-                    }}
-                    height="100%"
-                    initialCenter={[latitude, longitude]}
-                  />
+              {/* Simple Map */}
+              {dispatchStatus === 'accepted' && workerCoords && (
+                <div style={{ height: '300px', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--border-grey)', marginBottom: '20px' }}>
+                  <MapContainer
+                    center={[latitude, longitude]}
+                    zoom={13}
+                    style={{ height: '100%', width: '100%' }}
+                  >
+                    <TileLayer
+                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                      attribution='&copy; OpenStreetMap contributors'
+                    />
+                    <Marker position={[latitude, longitude]}>
+                      <Popup>Your Location</Popup>
+                    </Marker>
+                    <Marker position={[workerCoords.latitude, workerCoords.longitude]}>
+                      <Popup>{workerDetails?.name || 'Worker'}</Popup>
+                    </Marker>
+                  </MapContainer>
                 </div>
+              )}
 
                 {/* Cancel/Complete/Reject options */}
                 <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}>
@@ -1134,7 +1315,7 @@ export default function CustomerDashboard({ user }) {
                   )}
                   {dispatchStatus === 'accepted' && (
                     <div style={{ display: 'flex', gap: '10px' }}>
-                      <button 
+                      <button
                         onClick={handleCompleteJob}
                         className="btn btn-primary"
                         style={{ padding: '8px 16px', fontSize: '13px' }}
@@ -1142,7 +1323,7 @@ export default function CustomerDashboard({ user }) {
                         <CheckCircle size={14} style={{ marginRight: '6px' }} />
                         Complete Job
                       </button>
-                      <button 
+                      <button
                         onClick={handleRejectJob}
                         className="btn btn-secondary"
                         style={{ padding: '8px 16px', fontSize: '13px', borderColor: 'var(--error-color)', color: 'var(--error-color)' }}
@@ -1154,185 +1335,7 @@ export default function CustomerDashboard({ user }) {
                   )}
                 </div>
               </div>
-
-              {/* Sidebar Action Column: Details, Live Chat and Payments */}
-              <div style={{ borderLeft: '1px solid var(--border-grey)', paddingLeft: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                
-                {/* 1. Service Address Summary */}
-                <div style={{ background: 'var(--bg-input)', padding: '16px', borderRadius: '12px', border: '1px solid var(--border-grey)' }}>
-                  <h4 style={{ fontSize: '16px', marginBottom: '8px' }}>Your Service Address</h4>
-                  <p style={{ fontSize: '13px', color: '#fff', fontWeight: '600', lineHeight: 1.5 }}>
-                    {getDisplayAddress(activeJob?.location || { address, manualAddress, latitude, longitude })}
-                  </p>
-                  <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '6px' }}>
-                    This is the address the worker will see for your request.
-                  </p>
-                </div>
-
-                {/* 2. Assigned Worker Profile */}
-                <div>
-                  <h4 style={{ fontSize: '16px', marginBottom: '12px' }}>Worker Profile</h4>
-                  {workerDetails ? (
-                    <div style={{ background: 'var(--bg-input)', padding: '16px', borderRadius: '12px', border: '1px solid var(--border-grey)' }}>
-                      <h5 style={{ fontSize: '15px', color: '#fff' }}>{workerDetails.name}</h5>
-                      <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Skillsverse Approved Contractor</span>
-                      <div style={{ display: 'flex', gap: '10px', marginTop: '12px', alignItems: 'center' }}>
-                        <Phone size={14} color="var(--primary-orange)" />
-                        <span style={{ fontSize: '13px' }}>{workerDetails.phone}</span>
-                      </div>
-                      <div style={{ display: 'flex', gap: '6px', marginTop: '10px' }}>
-                        <StatusBadge status={activeJob.status} className="badge-sm" />
-                      </div>
-                    </div>
-                  ) : (
-                    <div style={{ background: 'var(--bg-input)', padding: '16px', borderRadius: '12px', color: 'var(--text-secondary)', fontSize: '13px', fontStyle: 'italic' }}>
-                      Waiting for a worker to accept your request...
-                    </div>
-                  )}
-                </div>
-
-                {/* 3. Escrow Payment Action */}
-                {workerDetails && (
-                  <div style={{ background: 'rgba(255, 107, 0, 0.05)', border: '1px solid rgba(255,107,0,0.3)', borderRadius: '12px', padding: '16px' }}>
-                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '8px' }}>
-                      <CreditCard size={18} color="var(--primary-orange)" />
-                      <h5 style={{ fontSize: '14px', color: '#fff' }}>Escrow Payment</h5>
-                    </div>
-                    <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '12px' }}>
-                      <strong>PKR {activeJob?.payment?.amount?.toLocaleString() || '1,500'}</strong> is held in Skillsverse Vault. Pay securely via card once the service is complete.
-                    </p>
-                    <div style={{ marginBottom: '12px', padding: '10px', background: 'var(--bg-input)', borderRadius: '8px', border: '1px solid var(--border-grey)' }}>
-                      <span style={{ fontSize: '11px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '4px' }}>Payment Method</span>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <CreditCard size={14} color="var(--primary-orange)" />
-                        <span style={{ fontSize: '13px', color: '#fff' }}>Stripe Card Payment</span>
-                      </div>
-                    </div>
-                    {activeJob?.payment?.status === 'paid' ? (
-                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', color: 'var(--success-color)', fontSize: '13px', fontWeight: 700 }}>
-                        <CheckCircle size={15} />
-                        Payment Confirmed — Job Completed!
-                      </div>
-                    ) : activeJob?.status === 'completed' ? (
-                      <button
-                        onClick={handlePayment}
-                        className="btn btn-primary"
-                        style={{ width: '100%', padding: '10px', fontSize: '13px' }}
-                      >
-                        <CreditCard size={14} />
-                        Pay Now via Stripe Card
-                      </button>
-                    ) : (
-                      <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-                        Waiting for worker to complete the job.
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* 4. Live Chat */}
-                {workerDetails && (
-                  <div>
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '10px' }}>
-                      <MessageSquare size={16} color="var(--primary-orange)" />
-                      <h4 style={{ fontSize: '15px' }}>Job Discussion Chat</h4>
-                    </div>
-
-                    <div className="chat-window" style={{ height: '340px' }}>
-                      <div className="chat-messages">
-                        {messages.length === 0 ? (
-                          <div style={{ fontSize: '12px', color: 'var(--text-muted)', fontStyle: 'italic', textAlign: 'center', marginTop: '40px' }}>
-                            Start typing below to talk with {workerDetails.name}
-                          </div>
-                        ) : (
-                          messages.map((msg, i) => (
-                            <div key={i} className={`chat-bubble ${msg.sender}`} style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: '180px' }}>
-                              {msg.text && <div>{msg.text}</div>}
-                              {msg.voiceUrl && (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                  <audio 
-                                    src={msg.voiceUrl.startsWith('http') ? msg.voiceUrl : `${API_URL}${msg.voiceUrl}`} 
-                                    controls 
-                                    style={{ width: '100%', height: '32px', minWidth: '150px' }} 
-                                  />
-                                  {msg.voiceDuration > 0 && (
-                                    <span style={{ fontSize: '10px', color: '#fff', opacity: 0.8 }}>
-                                      {Math.floor(msg.voiceDuration / 60)}:{(msg.voiceDuration % 60).toString().padStart(2, '0')}
-                                    </span>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          ))
-                        )}
-                        <div ref={chatEndRef} />
-                      </div>
-
-                      <form ref={chatRef} onSubmit={sendMessage} className="chat-input-area" style={{ display: 'flex', alignItems: 'center', padding: '4px 8px', background: 'var(--bg-input)' }}>
-                        {isChatRecording ? (
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '6px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                              <span 
-                                style={{ 
-                                  width: '10px', 
-                                  height: '10px', 
-                                  borderRadius: '50%', 
-                                  background: 'var(--error-color)', 
-                                  animation: 'pulseMic 1s infinite' 
-                                }} 
-                              />
-                              <span style={{ fontSize: '13px', color: 'var(--text-primary)' }}>
-                                Recording ({chatRecordingDuration}s)...
-                              </span>
-                            </div>
-                            <div style={{ display: 'flex', gap: '6px' }}>
-                              <button 
-                                type="button" 
-                                className="btn btn-secondary" 
-                                onClick={() => stopChatRecording(false)}
-                                style={{ padding: '4px 8px', fontSize: '12px', borderColor: 'var(--error-color)', color: 'var(--error-color)' }}
-                              >
-                                Cancel
-                              </button>
-                              <button 
-                                type="button" 
-                                className="btn btn-primary" 
-                                onClick={() => stopChatRecording(true)}
-                                style={{ padding: '4px 8px', fontSize: '12px' }}
-                              >
-                                Send
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <>
-                            <input 
-                              type="text"
-                              placeholder="Type message..."
-                              value={newMessage}
-                              onChange={(e) => setNewMessage(e.target.value)}
-                              className="chat-input"
-                              style={{ flex: 1, border: 'none', background: 'transparent', color: '#fff', padding: '12px' }}
-                            />
-                            <button 
-                              type="button" 
-                              onClick={startChatRecording}
-                              style={{ background: 'none', border: 'none', padding: '0 8px', color: 'var(--text-secondary)', cursor: 'pointer' }}
-                              title="Record Voice Message"
-                            >
-                              <Mic size={18} />
-                            </button>
-                            <button type="submit" style={{ background: 'none', border: 'none', padding: '0 16px', color: 'var(--primary-orange)', cursor: 'pointer' }}>
-                              <Send size={16} />
-                            </button>
-                          </>
-                        )}
-                      </form>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
+            </>
           )}
         </div>
       )}
@@ -1392,14 +1395,42 @@ export default function CustomerDashboard({ user }) {
                   />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Construction Site Address</label>
+                  <label className="form-label">City</label>
+                  <select 
+                    value={conCity} 
+                    onChange={(e) => setConCity(e.target.value)} 
+                    className="form-input"
+                    required
+                  >
+                    <option value="">Select City</option>
+                    {pakCities.map(city => <option key={city} value={city}>{city}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginTop: '20px' }}>
+                <div className="form-group">
+                  <label className="form-label">Residence Area</label>
                   <input 
                     type="text" 
-                    value={conAddress} 
-                    onChange={(e) => setConAddress(e.target.value)} 
+                    placeholder="e.g. Clifton Block 5"
+                    value={conResidenceArea} 
+                    onChange={(e) => setConResidenceArea(e.target.value)} 
                     className="form-input"
                     required
                   />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Exact Location / Address</label>
+                  <input 
+                    type="text" 
+                    value={conExactLocation} 
+                    onChange={(e) => setConExactLocation(e.target.value)} 
+                    className="form-input"
+                  />
+                  {conLocationHint ? (
+                    <div style={{ marginTop: '6px', fontSize: '12px', color: 'var(--text-secondary)' }}>{conLocationHint}</div>
+                  ) : null}
                 </div>
               </div>
 
@@ -1478,19 +1509,40 @@ export default function CustomerDashboard({ user }) {
                           </span>
                         </td>
                         <td style={{ padding: '12px' }}>{job.category}</td>
-                        <td style={{ padding: '12px' }}>{job.worker ? job.worker.name : <span style={{ color: 'var(--text-muted)' }}>Not Assigned</span>}</td>
+                        <td style={{ padding: '12px' }}>
+                          {job.worker ? (
+                            <div>
+                              <div>{job.worker.name}</div>
+                              {job.worker.averageRating !== undefined && (
+                                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                  <span style={{ color: '#fbbf24' }}>★</span>
+                                  <span style={{ fontWeight: 'bold', color: '#fff' }}>{job.worker.averageRating}</span>
+                                  <span>({job.worker.totalReviews})</span>
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <span style={{ color: 'var(--text-muted)' }}>Not Assigned</span>
+                          )}
+                        </td>
                         <td style={{ padding: '12px' }}>
                           <StatusBadge status={job.status} />
                         </td>
                         <td style={{ padding: '12px' }}>
                           <div style={{ display: 'flex', flexDirection: 'column' }}>
-                            <span style={{ fontWeight: '600' }}>{job.payment.amount} PKR</span>
+                            {job.type === 'construction' ? (
+                              <span style={{ fontWeight: '600', color: 'var(--text-muted)' }}>Budget Hidden</span>
+                            ) : (
+                              <span style={{ fontWeight: '600' }}>{job.payment.amount} PKR</span>
+                            )}
                             <span style={{ fontSize: '11px', color: job.payment.status === 'paid' ? 'var(--success-color)' : 'var(--warning-color)' }}>
                               {job.payment.status === 'paid' ? 'Paid' : 'Pending'}
                             </span>
-                            <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                              Hold: {job.payment.holdStatus || 'held'}
-                            </span>
+                            {job.type !== 'construction' && (
+                              <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                                Hold: {job.payment.holdStatus || 'held'}
+                              </span>
+                            )}
                           </div>
                         </td>
                         <td style={{ padding: '12px' }}>
@@ -1603,6 +1655,28 @@ export default function CustomerDashboard({ user }) {
           onClose={handleClosePayment}
         />
       )}
+      {showCompletionModal && completionJob && (
+        <div className="spm-overlay" onClick={() => { setShowCompletionModal(false); setCompletionJob(null); }}>
+          <div className="spm-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+            <div style={{ padding: 20 }}>
+              <h3>Service completed successfully</h3>
+              <p style={{ color: 'var(--text-secondary)' }}>The service was marked complete. You can provide feedback or return to the dashboard.</p>
+              <div style={{ display: 'flex', gap: '10px', marginTop: 16 }}>
+                <button className="btn btn-primary" onClick={() => {
+                  setShowCompletionModal(false);
+                  if (completionJob) setFeedbackJob(completionJob);
+                  setShowFeedbackModal(true);
+                }}>Give Feedback</button>
+                <button className="btn btn-secondary" onClick={() => {
+                  setShowCompletionModal(false);
+                  setCompletionJob(null);
+                  setActiveTab('daily');
+                }}>Back To Dashboard</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       {showComplaintModal && complaintModalJob && (
         <ComplaintModal
           job={complaintModalJob}
@@ -1688,6 +1762,78 @@ export default function CustomerDashboard({ user }) {
       )}
 
       {/* Onboarding walkthrough Modal */}
+
+      {/* Feedback Modal */}
+      {showFeedbackModal && feedbackJob && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
+          background: 'rgba(0,0,0,0.80)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
+        }}>
+          <div style={{
+            background: 'var(--bg-card)', padding: '24px', borderRadius: '16px',
+            width: '100%', maxWidth: '420px', border: '1px solid var(--border-grey)'
+          }}>
+            <h3 style={{ fontSize: '20px', marginBottom: '16px', color: '#fff' }}>Rate your Worker</h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '13px', marginBottom: '20px' }}>
+              How was your experience with {feedbackJob.worker?.name || 'the worker'}?
+            </p>
+            
+            <form onSubmit={handleFeedbackSubmit}>
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', justifyContent: 'center' }}>
+                {[1, 2, 3, 4, 5].map(star => (
+                  <button
+                    key={star}
+                    type="button"
+                    onClick={() => setFeedbackRating(star)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      fontSize: '32px',
+                      color: star <= feedbackRating ? '#fbbf24' : 'var(--text-muted)',
+                      cursor: 'pointer',
+                      transition: 'color 0.2s ease',
+                      outline: 'none'
+                    }}
+                  >
+                    ★
+                  </button>
+                ))}
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Feedback (Optional)</label>
+                <textarea
+                  className="form-input"
+                  placeholder="Share details of your experience..."
+                  value={feedbackText}
+                  onChange={(e) => setFeedbackText(e.target.value)}
+                  rows={3}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ flex: 1 }}
+                  onClick={() => { setShowFeedbackModal(false); setFeedbackJob(null); }}
+                  disabled={submittingFeedback}
+                >
+                  Skip
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  style={{ flex: 1 }}
+                  disabled={submittingFeedback}
+                >
+                  {submittingFeedback ? 'Submitting...' : 'Submit Review'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
     </DashboardLayout>
   );

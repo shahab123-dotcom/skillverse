@@ -25,6 +25,9 @@ const WorkerSchema = new Schema({
     experienceYears: { type: Number, default: 0 },
     specialization: { type: String, default: '' },
     serviceArea: { type: String, default: '' },
+    city: { type: String, default: '' },
+    residenceArea: { type: String, default: '' },
+    exactLocation: { type: String, default: '' },
     status: { type: String, enum: ['none', 'pending', 'approved', 'rejected'], default: 'none' }
   },
   latitude: { type: Number, default: 24.8607 },  // Default coordinates (e.g. Karachi-like center)
@@ -32,15 +35,20 @@ const WorkerSchema = new Schema({
   totalRequests: { type: Number, default: 0 },
   completedRequests: { type: Number, default: 0 },
   isBlocked: { type: Boolean, default: false },
-  stripeAccountId: { type: String, default: '' } // Stripe Connect account for payouts
+  stripeAccountId: { type: String, default: '' }, // Stripe Connect account for payouts
+  averageRating: { type: Number, default: 0 },
+  totalReviews: { type: Number, default: 0 }
 });
 
 // Job Schema (Handles both Daily Routine and Newly Construction)
 const JobSchema = new Schema({
   type: { type: String, enum: ['daily', 'construction'], required: true },
   category: { type: String, required: true },
+  title: { type: String, default: '' },
   customer: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  customerName: { type: String, default: '' },
   worker: { type: Schema.Types.ObjectId, ref: 'Worker', default: null },
+  declinedBy: [{ type: Schema.Types.ObjectId, ref: 'Worker' }],
   description: { type: String, default: '' },
   voiceUrl: { type: String, default: '' }, // File path to audio note
   voiceTranscript: { type: String, default: '' }, // Optional text transcript
@@ -48,6 +56,8 @@ const JobSchema = new Schema({
     latitude: { type: Number, required: true },
     longitude: { type: Number, required: true },
     address: { type: String, required: true },
+    city: { type: String, default: '' },
+    residenceArea: { type: String, default: '' },
     manualAddress: { type: String, default: '' }
   },
   status: {
@@ -57,8 +67,16 @@ const JobSchema = new Schema({
   },
   contractorOffers: [{
     contractorId: { type: Schema.Types.ObjectId, ref: 'Worker' },
+    bidderName: { type: String, default: '' },
+    bidderCity: { type: String, default: '' },
+    bidderResidenceArea: { type: String, default: '' },
+    bidderPhone: { type: String, default: '' },
     status: { type: String, enum: ['pending', 'accepted', 'rejected'], default: 'pending' },
+    bidAmount: { type: Number, default: 0 },
+    completionDays: { type: Number, default: 0 },
+    notes: { type: String, default: '' },
     sentAt: { type: Date, default: Date.now },
+    submittedAt: { type: Date, default: null },
     respondedAt: { type: Date, default: null }
   }],
   tracking: {
@@ -69,6 +87,7 @@ const JobSchema = new Schema({
   },
   payment: {
     amount: { type: Number, default: 0 },
+    basePrice: { type: Number, default: 0 },
     status: { type: String, enum: ['pending', 'paid'], default: 'pending' },
     method: { type: String, default: '' }, // 'stripe'
     holdStatus: { 
@@ -85,6 +104,7 @@ const JobSchema = new Schema({
     stripePaymentIntentId: { type: String, default: '' },
     stripeTransferId: { type: String, default: '' }
   },
+  isReviewed: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now }
 });
 
@@ -120,10 +140,21 @@ const ComplaintSchema = new Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
+// Review Schema
+const ReviewSchema = new Schema({
+  worker: { type: Schema.Types.ObjectId, ref: 'Worker', required: true },
+  job: { type: Schema.Types.ObjectId, ref: 'Job', required: true },
+  customer: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  rating: { type: Number, required: true, min: 1, max: 5 },
+  feedback: { type: String, default: '' },
+  createdAt: { type: Date, default: Date.now }
+});
+
 const User = mongoose.model('User', UserSchema);
 const Worker = mongoose.model('Worker', WorkerSchema);
 const Job = mongoose.model('Job', JobSchema);
 const Message = mongoose.model('Message', MessageSchema);
 const Complaint = mongoose.model('Complaint', ComplaintSchema);
+const Review = mongoose.model('Review', ReviewSchema);
 
-module.exports = { User, Worker, Job, Message, Complaint };
+module.exports = { User, Worker, Job, Message, Complaint, Review };

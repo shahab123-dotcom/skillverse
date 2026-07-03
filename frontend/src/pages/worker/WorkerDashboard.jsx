@@ -10,7 +10,6 @@ import EmptyState from '../../components/shared/EmptyState';
 import Pagination from '../../components/shared/Pagination';
 import { TableSkeleton } from '../../components/shared/LoadingSkeleton';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
-import LiveTrackingMap from '../../components/shared/LiveTrackingMap';
 
 export default function WorkerDashboard({ user }) {
   const socketRef = useRef(null);
@@ -34,7 +33,10 @@ export default function WorkerDashboard({ user }) {
     companyName: user.contractorProfile?.companyName || '',
     experienceYears: user.contractorProfile?.experienceYears || '',
     specialization: user.contractorProfile?.specialization || '',
-    serviceArea: user.contractorProfile?.serviceArea || ''
+    serviceArea: user.contractorProfile?.serviceArea || '',
+    city: user.contractorProfile?.city || '',
+    residenceArea: user.contractorProfile?.residenceArea || '',
+    exactLocation: user.contractorProfile?.exactLocation || ''
   });
   const [contractorLoading, setContractorLoading] = useState(false);
   const [contractorError, setContractorError] = useState('');
@@ -46,17 +48,24 @@ export default function WorkerDashboard({ user }) {
         companyName: profile.contractorProfile.companyName || '',
         experienceYears: profile.contractorProfile.experienceYears || '',
         specialization: profile.contractorProfile.specialization || '',
-        serviceArea: profile.contractorProfile.serviceArea || ''
+        serviceArea: profile.contractorProfile.serviceArea || '',
+        city: profile.contractorProfile.city || '',
+        residenceArea: profile.contractorProfile.residenceArea || '',
+        exactLocation: profile.contractorProfile.exactLocation || ''
       });
     }
   }, [profile]);
 
   const [constructionProjects, setConstructionProjects] = useState([]);
   const [contractorCityFilter, setContractorCityFilter] = useState('');
+  const [selectedProjectLocation, setSelectedProjectLocation] = useState(null);
+  const [selectedBidJob, setSelectedBidJob] = useState(null);
+  const [bidForm, setBidForm] = useState({ bidAmount: '', completionDays: '', notes: '' });
   const itemsPerPage = 10;
   const [historyPage, setHistoryPage] = useState(1);
   const [constructionPage, setConstructionPage] = useState(1);
   const [earningsSummary, setEarningsSummary] = useState({ totalEarned: 0, pendingAmount: 0, completedJobs: 0 });
+  const [recentReviews, setRecentReviews] = useState([]);
 
   // Active Job State
   const [activeJob, setActiveJob] = useState(null);
@@ -69,11 +78,10 @@ export default function WorkerDashboard({ user }) {
   const [incomingJob, setIncomingJob] = useState(null);
   const [alertCountdown, setAlertCountdown] = useState(30);
 
-  // Simulated GPS state
+  // GPS state
   const [gpsLocation, setGpsLocation] = useState({ latitude: 24.8607, longitude: 67.0011 });
-  const [trackingDistance, setTrackingDistance] = useState(null);
-  const [trackingEta, setTrackingEta] = useState(null);
   const [isSimulatingGps, setIsSimulatingGps] = useState(false);
+  const [socketConnectionStatus, setSocketConnectionStatus] = useState('connected');
 
   // Chat state
   const [messages, setMessages] = useState([]);
@@ -90,8 +98,8 @@ export default function WorkerDashboard({ user }) {
   const profileRef = useRef(null);
   const availabilityRef = useRef(null);
   const requestRef = useRef(null);
-  const trackingRef = useRef(null);
   const latestProfileRef = useRef(user);
+  const isAvailableRef = useRef(user.isAvailable);
 
   // Walkthrough Onboarding Tutorial State
   const [showTutorial, setShowTutorial] = useState(false);
@@ -113,10 +121,21 @@ export default function WorkerDashboard({ user }) {
   }, [profile]);
 
   useEffect(() => {
+    isAvailableRef.current = isAvailable;
+  }, [isAvailable]);
+
+  const notifyWorkerAvailable = () => {
+    const workerId = String(latestProfileRef.current?._id || latestProfileRef.current?.id || user.id || user._id || '');
+    if (!workerId || !socketRef.current?.connected || !isAvailableRef.current) return;
+    socketRef.current.emit('worker_available', { workerId });
+  };
+
+  useEffect(() => {
     loadProfile();
     loadActiveJob();
     loadWorkerHistory();
     loadConstructionProjects();
+    loadReviews();
     return () => {
       stopGpsSimulation();
       stopWatchingLocation();
@@ -168,6 +187,20 @@ export default function WorkerDashboard({ user }) {
     }
   };
 
+  const loadReviews = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/workers/me/reviews`, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setRecentReviews(data);
+      }
+    } catch (error) {
+      console.error('Failed to load reviews:', error);
+    }
+  };
+
   const getPaginatedItems = (items, page) => items.slice((page - 1) * itemsPerPage, page * itemsPerPage);
   const getTotalPages = (items) => Math.max(1, Math.ceil(items.length / itemsPerPage));
 
@@ -207,7 +240,7 @@ export default function WorkerDashboard({ user }) {
 
   useEffect(() => {
     if (!showTutorial) return;
-    const stepRefs = [profileRef, availabilityRef, requestRef, trackingRef];
+    const stepRefs = [profileRef, availabilityRef, requestRef];
     const current = stepRefs[tutorialStep - 1]?.current;
     if (current) {
       const rect = current.getBoundingClientRect();
@@ -252,25 +285,9 @@ export default function WorkerDashboard({ user }) {
     return R * c;
   };
 
-  const updateTrackingStats = (coords) => {
-    if (!activeJob?.location?.latitude || !activeJob?.location?.longitude || !coords?.latitude || !coords?.longitude) {
-      return;
-    }
-
-    const toLat = Number(activeJob.location.latitude);
-    const toLon = Number(activeJob.location.longitude);
-    const fromLat = Number(coords.latitude);
-    const fromLon = Number(coords.longitude);
-    const distance = getDistanceKm(fromLat, fromLon, toLat, toLon);
-
-    setTrackingDistance(distance);
-    setTrackingEta(Math.max(1, Math.round(distance * 5)));
-  };
-
   const syncWorkerLocation = (lat, lon) => {
     const nextCoords = { latitude: lat, longitude: lon };
     setGpsLocation(nextCoords);
-    updateTrackingStats(nextCoords);
     updateBackendLocation(lat, lon);
 
     const currentJob = activeJobRef.current;
@@ -336,6 +353,13 @@ export default function WorkerDashboard({ user }) {
     stopWatchingLocation();
   }, [profile?.status, isAvailable, activeJob?._id]);
 
+  // Ensure worker notifies availability when socket connects
+  useEffect(() => {
+    if (socketConnectionStatus === 'connected' && isAvailable && socketRef.current?.connected) {
+      notifyWorkerAvailable();
+    }
+  }, [socketConnectionStatus, isAvailable]);
+
   // Load Profile from DB
   const loadProfile = async () => {
     try {
@@ -343,22 +367,27 @@ export default function WorkerDashboard({ user }) {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
       });
       const data = await response.json();
-      if (response.ok) {
+      if (response.ok && data.user) {
         setProfile(data.user);
         setIsAvailable(data.user.isAvailable);
-        
+
         // Initialize Sockets if Worker is approved
         if (data.user.status === 'approved') {
           setupSockets(data.user);
           if (data.user.isAvailable) {
+            isAvailableRef.current = true;
             startWatchingLocation();
           } else {
-            fetchWorkerLocation(); // Fetch & update real GPS coordinates
+            fetchWorkerLocation();
           }
         }
+      } else {
+        console.error('Failed to load profile:', data.error);
+        toast.error('Failed to load profile');
       }
     } catch (error) {
-      console.error(error);
+      console.error('Profile loading error:', error);
+      toast.error('Failed to load profile');
     }
   };
 
@@ -379,7 +408,12 @@ export default function WorkerDashboard({ user }) {
           companyName: contractorForm.companyName,
           experienceYears: Number(contractorForm.experienceYears),
           specialization: contractorForm.specialization,
-          serviceArea: contractorForm.serviceArea
+          serviceArea: contractorForm.serviceArea,
+          city: contractorForm.city,
+          residenceArea: contractorForm.residenceArea,
+          exactLocation: contractorForm.exactLocation,
+          latitude: gpsLocation.latitude,
+          longitude: gpsLocation.longitude
         })
       });
 
@@ -536,6 +570,7 @@ export default function WorkerDashboard({ user }) {
     setActiveJob(null);
     setJobStatus('');
     setMessages([]);
+    setSocketConnectionStatus('connected');
     setActiveTab('overview');
     loadWorkerHistory();
     loadConstructionProjects();
@@ -563,6 +598,40 @@ export default function WorkerDashboard({ user }) {
     } catch (error) {
       console.error('Failed to respond to construction assignment:', error);
       toast.error('Failed to respond to assignment');
+    }
+  };
+
+  const handleBidSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const response = await fetch(`${API_URL}/api/jobs/${selectedBidJob._id}/bid`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          bidAmount: Number(bidForm.bidAmount),
+          completionDays: Number(bidForm.completionDays),
+          notes: bidForm.notes,
+          // Send current profile city/area so admin sees correct location even for older profiles
+          bidderCity: profile?.contractorProfile?.city || contractorForm.city || '',
+          bidderResidenceArea: profile?.contractorProfile?.residenceArea || contractorForm.residenceArea || ''
+        })
+      });
+      const data = await response.json();
+      if (response.ok) {
+        toast.success('Bid submitted successfully');
+        setSelectedBidJob(null);
+        setBidForm({ bidAmount: '', completionDays: '', notes: '' });
+        loadConstructionProjects();
+        loadWorkerHistory();
+      } else {
+        toast.error(data.error || 'Failed to submit bid');
+      }
+    } catch (error) {
+      console.error('Failed to submit bid:', error);
+      toast.error('Failed to submit bid');
     }
   };
 
@@ -594,34 +663,47 @@ export default function WorkerDashboard({ user }) {
   const setupSockets = (worker) => {
     if (socketRef.current) socketRef.current.disconnect();
 
-    const socket = io(API_URL);
+    connectionErrorShownRef.current = false;
+    const socket = io(API_URL, {
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000
+    });
     socketRef.current = socket;
 
-    socket.emit('register', worker._id);
-
     socket.on('connect', () => {
+      const workerId = String(worker._id || worker.id);
+      socket.emit('register', workerId);
+      setSocketConnectionStatus('connected');
+      if (isAvailableRef.current) {
+        socket.emit('worker_available', { workerId });
+      }
       if (connectionErrorShownRef.current) {
-        toast.success('Tracking connection restored.');
+        toast.success('Connection restored.');
         connectionErrorShownRef.current = false;
       }
     });
 
     socket.on('connect_error', () => {
+      setSocketConnectionStatus('reconnecting');
       if (!connectionErrorShownRef.current) {
-        toast.error('Connection lost. Reconnecting to tracking service...');
+        toast.error('Connection lost. Reconnecting...');
         connectionErrorShownRef.current = true;
       }
     });
 
     socket.on('disconnect', () => {
+      setSocketConnectionStatus('disconnected');
       if (!connectionErrorShownRef.current) {
-        toast.info('Tracking connection disconnected. Reconnect when network is available.');
+        toast.info('Connection disconnected. Reconnect when network is available.');
         connectionErrorShownRef.current = true;
       }
     });
 
     // Listen for incoming match requests
     socket.on('incoming_job_request', (offer) => {
+      console.log('[Worker Socket] incoming_job_request received', offer);
+      toast.info('New Service Request');
       setIncomingJob(offer);
       setAlertCountdown(30);
     });
@@ -661,6 +743,16 @@ export default function WorkerDashboard({ user }) {
     socket.on('receive_message', (message) => {
       setMessages(prev => [...prev, message]);
     });
+
+    // Listen for worker rating update
+    socket.on('worker_rating_updated', (data) => {
+      if (latestProfileRef.current?._id === data.workerId) {
+        setProfile(prev => ({ ...prev, averageRating: data.averageRating, totalReviews: data.totalReviews }));
+        if (data.latestReview) {
+          setRecentReviews(prev => [data.latestReview, ...prev].slice(0, 20));
+        }
+      }
+    });
   };
 
   // Job alert modal countdown timer
@@ -693,16 +785,9 @@ export default function WorkerDashboard({ user }) {
   // Toggle Availability
   const handleToggleAvailability = async () => {
     const updatedStatus = !isAvailable;
-    setIsAvailable(updatedStatus);
+    const previousStatus = isAvailable;
 
     try {
-      // If turning availability on, start watching GPS
-      if (updatedStatus) {
-        startWatchingLocation();
-      } else {
-        stopWatchingLocation();
-      }
-
       const response = await fetch(`${API_URL}/api/workers/availability`, {
         method: 'PUT',
         headers: {
@@ -711,21 +796,27 @@ export default function WorkerDashboard({ user }) {
         },
         body: JSON.stringify({ isAvailable: updatedStatus })
       });
+
       if (!response.ok) {
-        setIsAvailable(!updatedStatus);
-        if (!updatedStatus) {
-          startWatchingLocation();
-        } else {
-          stopWatchingLocation();
-        }
+        toast.error('Failed to update availability.');
+        return;
       }
-    } catch (error) {
-      setIsAvailable(!updatedStatus);
-      if (!updatedStatus) {
+
+      setIsAvailable(updatedStatus);
+      isAvailableRef.current = updatedStatus;
+
+      if (updatedStatus) {
         startWatchingLocation();
+        notifyWorkerAvailable();
+        toast.success('You are online and can receive job requests.');
       } else {
         stopWatchingLocation();
+        toast.info('You are offline.');
       }
+    } catch (error) {
+      setIsAvailable(previousStatus);
+      isAvailableRef.current = previousStatus;
+      toast.error('Failed to update availability.');
     }
   };
 
@@ -776,7 +867,7 @@ export default function WorkerDashboard({ user }) {
 
     // Join room & emit accept
     socketRef.current.emit('join_job', incomingJob.jobId);
-    socketRef.current.emit('accept_job', { jobId: incomingJob.jobId, workerId: profile._id });
+    socketRef.current.emit('accept_job', { jobId: incomingJob.jobId, workerId: String(profile._id || profile.id) });
 
     // Load active job details
     setTimeout(() => {
@@ -790,7 +881,8 @@ export default function WorkerDashboard({ user }) {
   // Decline Job Offer
   const handleDeclineOffer = () => {
     if (!incomingJob) return;
-    socketRef.current.emit('decline_job', { jobId: incomingJob.jobId });
+    const workerId = String(profile._id || profile.id || user.id || '');
+    socketRef.current.emit('decline_job', { jobId: incomingJob.jobId, workerId });
     setIncomingJob(null);
   };
 
@@ -903,24 +995,55 @@ export default function WorkerDashboard({ user }) {
   };
 
   // If worker is still pending verification from Admin
-  if (profile.status === 'pending') {
+  if (profile?.status === 'pending') {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '60px 20px', minHeight: 'calc(100vh - 72px)' }}>
         <div className="card" style={{ maxWidth: '560px', textAlign: 'center', padding: '40px' }}>
           <AlertTriangle size={48} color="var(--warning-color)" style={{ margin: '0 auto 20px' }} />
           <h2 style={{ fontSize: '24px', marginBottom: '12px' }}>Registration Pending Approval</h2>
           <p style={{ color: 'var(--text-secondary)', lineHeight: '1.6', marginBottom: '24px' }}>
-            Thank you for registering with Skillsverse! Your profile credentials and skills are currently being evaluated by the Administration team. 
+            Thank you for registering with Skillsverse! Your profile credentials and skills are currently being evaluated by the Administration team.
           </p>
           <div style={{ background: 'var(--bg-input)', border: '1px solid var(--border-grey)', borderRadius: '10px', padding: '16px', fontSize: '13px', textAlign: 'left' }}>
             <strong>Your Profile details:</strong>
-            <p style={{ color: 'var(--text-secondary)', marginTop: '4px' }}>Name: {profile.name}</p>
-            <p style={{ color: 'var(--text-secondary)' }}>Email: {profile.email}</p>
-            <p style={{ color: 'var(--text-secondary)' }}>Registered Skills: {profile.skills.join(', ')}</p>
+            <p style={{ color: 'var(--text-secondary)', marginTop: '4px' }}>Name: {profile?.name}</p>
+            <p style={{ color: 'var(--text-secondary)' }}>Email: {profile?.email}</p>
+            <p style={{ color: 'var(--text-secondary)' }}>Registered Skills: {profile?.skills?.join(', ') || 'None'}</p>
           </div>
           <button onClick={loadProfile} className="btn btn-primary" style={{ marginTop: '24px', width: '100%' }}>
             Check Approval Status
           </button>
+        </div>
+      </div>
+    );
+  }
+
+  // If worker registration was rejected
+  if (profile?.status === 'rejected') {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '60px 20px', minHeight: 'calc(100vh - 72px)' }}>
+        <div className="card" style={{ maxWidth: '560px', textAlign: 'center', padding: '40px' }}>
+          <AlertTriangle size={48} color="var(--error-color)" style={{ margin: '0 auto 20px' }} />
+          <h2 style={{ fontSize: '24px', marginBottom: '12px' }}>Registration Rejected</h2>
+          <p style={{ color: 'var(--text-secondary)', lineHeight: '1.6', marginBottom: '24px' }}>
+            Unfortunately, your application to join Skillsverse as a service provider has been rejected. Please contact support for more information.
+          </p>
+          <button onClick={() => window.location.href = '/'} className="btn btn-primary" style={{ marginTop: '24px', width: '100%' }}>
+            Return to Home
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // If profile is not loaded yet, show loading state
+  if (!profile || !profile._id) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '60px 20px', minHeight: 'calc(100vh - 72px)' }}>
+        <div className="card" style={{ maxWidth: '560px', textAlign: 'center', padding: '40px' }}>
+          <div style={{ width: '40px', height: '40px', border: '3px solid var(--primary-orange)', borderRadius: '50%', borderTop: '3px solid transparent', animation: 'spin 1s linear infinite', margin: '0 auto 20px' }} />
+          <h2 style={{ fontSize: '24px', marginBottom: '12px' }}>Loading your profile...</h2>
+          <p style={{ color: 'var(--text-secondary)' }}>Please wait while we retrieve your profile information.</p>
         </div>
       </div>
     );
@@ -932,7 +1055,7 @@ export default function WorkerDashboard({ user }) {
     'construction': { title: 'Contractor Projects', subtitle: 'Review assigned contractor projects and locations.' },
     'contractor-offers': { title: 'Contractor Offers', subtitle: 'Review contractor-specific service opportunities and profile status.' },
     history: { title: 'Service History', subtitle: 'Review past jobs and payment records.' },
-  }[activeTab];
+  }[activeTab] || { title: 'Worker Dashboard', subtitle: 'Manage your jobs and profile.' };
 
   return (
     <DashboardLayout
@@ -948,11 +1071,11 @@ export default function WorkerDashboard({ user }) {
           availabilityRef={availabilityRef}
         />
       }
-      title={pageMeta.title}
-      subtitle={pageMeta.subtitle}
+      title={pageMeta?.title || 'Worker Dashboard'}
+      subtitle={pageMeta?.subtitle || 'Manage your jobs and profile.'}
       userName={profile?.name}
     >
-      
+
       {/* Real-time job request notification alert modal */}
       {incomingJob && (
         <div ref={requestRef}
@@ -980,6 +1103,12 @@ export default function WorkerDashboard({ user }) {
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '24px' }}>
+              {/* Customer Name */}
+              <div style={{ background: 'var(--bg-input)', padding: '14px', borderRadius: '8px' }}>
+                <span className="form-label" style={{ fontSize: '11px' }}>Customer Name</span>
+                <h4 style={{ fontSize: '18px', color: '#fff' }}>{incomingJob.customer?.name || 'Unknown Customer'}</h4>
+              </div>
+
               {/* Category */}
               <div style={{ background: 'var(--bg-input)', padding: '14px', borderRadius: '8px' }}>
                 <span className="form-label" style={{ fontSize: '11px' }}>Category Requested</span>
@@ -1009,10 +1138,10 @@ export default function WorkerDashboard({ user }) {
                     <p style={{ fontSize: '13px', fontStyle: 'italic', marginBottom: '8px', color: '#fff' }}>"{incomingJob.voiceTranscript}"</p>
                   )}
                   {incomingJob.voiceUrl && (
-                    <audio 
-                      src={incomingJob.voiceUrl.startsWith('http') ? incomingJob.voiceUrl : `${API_URL}${incomingJob.voiceUrl}`} 
-                      controls 
-                      style={{ width: '100%', height: '36px' }} 
+                    <audio
+                      src={incomingJob.voiceUrl.startsWith('http') ? incomingJob.voiceUrl : `${API_URL}${incomingJob.voiceUrl}`}
+                      controls
+                      style={{ width: '100%', height: '36px' }}
                     />
                   )}
                 </div>
@@ -1076,6 +1205,41 @@ export default function WorkerDashboard({ user }) {
                 <p className="worker-profile-value worker-profile-value--success">{profile.completedRequests}</p>
               </div>
             </div>
+
+            {profile.averageRating !== undefined && profile.totalReviews !== undefined && (
+              <div style={{ marginTop: '24px', padding: '16px', borderRadius: '12px', background: 'var(--bg-dashboard)', border: '1px solid rgba(251, 191, 36, 0.3)' }}>
+                <h4 style={{ fontSize: '15px', color: '#fbbf24', marginBottom: '12px' }}>Worker Rating & Feedback</h4>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+                  <div style={{ fontSize: '32px', fontWeight: 'bold', color: '#fff', lineHeight: '1' }}>{profile.averageRating.toFixed(1)}</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <div style={{ display: 'flex', color: '#fbbf24', fontSize: '18px' }}>
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <span key={star}>{star <= Math.round(profile.averageRating) ? '★' : '☆'}</span>
+                      ))}
+                    </div>
+                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Based on {profile.totalReviews} reviews</span>
+                  </div>
+                </div>
+                {recentReviews.length > 0 && (
+                  <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <span style={{ fontSize: '12px', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Recent Feedback</span>
+                    {recentReviews.slice(0, 3).map(review => (
+                      <div key={review._id} style={{ background: 'rgba(255,255,255,0.03)', padding: '12px', borderRadius: '8px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                          <span style={{ fontSize: '13px', fontWeight: '600', color: '#fff' }}>{review.customer?.name || 'Customer'}</span>
+                          <span style={{ color: '#fbbf24', fontSize: '12px' }}>{'★'.repeat(review.rating)}{'☆'.repeat(5 - review.rating)}</span>
+                        </div>
+                        {review.feedback && <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>"{review.feedback}"</p>}
+                        <span style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'block', marginTop: '6px' }}>
+                          {new Date(review.createdAt).toLocaleDateString()}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             <div style={{ marginTop: '20px' }}>
               <span className="form-label">Registered Skills</span>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '8px' }}>
@@ -1108,6 +1272,55 @@ export default function WorkerDashboard({ user }) {
                 </div>
               </div>
             )}
+
+            {!isContractorUser && (
+              <div style={{ marginTop: '30px', padding: '20px', background: 'var(--bg-card)', border: '1px solid var(--border-grey)', borderRadius: '12px' }}>
+                <h4 style={{ color: 'var(--primary-orange)', marginBottom: '16px' }}>Become a Contractor</h4>
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '20px' }}>
+                  Register as a contractor to access large-scale construction projects and submit competitive bids.
+                </p>
+                {contractorError && <div style={{ color: 'var(--error-color)', fontSize: '13px', marginBottom: '16px' }}>{contractorError}</div>}
+                {contractorSuccess && <div style={{ color: 'var(--success-color)', fontSize: '13px', marginBottom: '16px' }}>{contractorSuccess}</div>}
+                <form onSubmit={handleContractorSubmit} style={{ display: 'grid', gap: '16px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                    <div className="form-group">
+                      <label className="form-label">Company Name</label>
+                      <input type="text" className="form-input" value={contractorForm.companyName} onChange={e => setContractorForm({ ...contractorForm, companyName: e.target.value })} required />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Experience (Years)</label>
+                      <input type="number" className="form-input" value={contractorForm.experienceYears} onChange={e => setContractorForm({ ...contractorForm, experienceYears: e.target.value })} required />
+                    </div>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                    <div className="form-group">
+                      <label className="form-label">Specialization</label>
+                      <input type="text" className="form-input" placeholder="e.g. Structural, Plumbing" value={contractorForm.specialization} onChange={e => setContractorForm({ ...contractorForm, specialization: e.target.value })} required />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">City</label>
+                      <select className="form-input" value={contractorForm.city} onChange={e => setContractorForm({ ...contractorForm, city: e.target.value })} required>
+                        <option value="">Select City</option>
+                        {['Lahore', 'Karachi', 'Islamabad', 'Rahim Yar Khan', 'Multan', 'Faisalabad', 'Rawalpindi', 'Bahawalpur'].map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                    <div className="form-group">
+                      <label className="form-label">Residence Area</label>
+                      <input type="text" className="form-input" placeholder="e.g. Clifton Block 5" value={contractorForm.residenceArea} onChange={e => setContractorForm({ ...contractorForm, residenceArea: e.target.value })} required />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Exact Location / Address</label>
+                      <input type="text" className="form-input" placeholder="Detailed address" value={contractorForm.exactLocation} onChange={e => setContractorForm({ ...contractorForm, exactLocation: e.target.value })} required />
+                    </div>
+                  </div>
+                  <button type="submit" className="btn btn-primary" disabled={contractorLoading} style={{ justifySelf: 'start', padding: '10px 20px' }}>
+                    {contractorLoading ? 'Submitting...' : 'Submit Contractor Profile'}
+                  </button>
+                </form>
+              </div>
+            )}
           </div>
         </>
       )}
@@ -1115,190 +1328,195 @@ export default function WorkerDashboard({ user }) {
       {activeTab === 'active-job' && (
         <>
           {activeJob ? (
-            <div ref={trackingRef} className="card job-tracking-grid job-tracking-grid--equal card--padded">
-                {/* Map Panel */}
+            <>
+              <div className="card card--padded">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                 <div>
-                  <h3 style={{ fontSize: '18px', color: 'var(--primary-orange)', marginBottom: '16px' }}>Live Navigation Map</h3>
+                  <h3 style={{ fontSize: '20px' }}>Active Job</h3>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>Category: <strong>{activeJob.category}</strong></p>
+                </div>
+                <StatusBadge status={jobStatus === 'assigned' ? 'assigned' : jobStatus === 'en_route' ? 'en_route' : 'completed'} label={jobStatus} />
+              </div>
 
-                  {/* Real-time Map */}
-                  <LiveTrackingMap
-                    role="worker"
-                    customerLocation={activeJob.location}
-                    workerLocation={gpsLocation}
-                    onRouteInfo={({ distanceKm, etaMinutes }) => {
-                      if (distanceKm !== null && etaMinutes !== null) {
-                        setTrackingDistance(distanceKm);
-                        setTrackingEta(etaMinutes);
-                      }
-                    }}
-                    height="380px"
-                    initialCenter={[gpsLocation.latitude, gpsLocation.longitude]}
-                  />
-
-                  <div style={{ background: 'var(--bg-input)', padding: '16px', borderRadius: '12px', border: '1px solid var(--border-grey)', marginBottom: '20px' }}>
-                    <span className="form-label" style={{ fontSize: '10px' }}>Customer Address</span>
-                    <p style={{ fontSize: '13px', fontWeight: '600', color: '#fff', marginBottom: '10px' }}>{getAddressText(activeJob.location)}</p>
-
-                    <span className="form-label" style={{ fontSize: '10px' }}>Service Category</span>
-                    <p style={{ fontSize: '13px', fontWeight: '600' }}>{activeJob.category}</p>
-
-                    <div style={{ display: 'flex', gap: '12px', marginTop: '12px', flexWrap: 'wrap' }}>
-                      <div style={{ background: 'rgba(255,107,0,0.12)', border: '1px solid rgba(255,107,0,0.2)', borderRadius: '10px', padding: '8px 10px' }}>
-                        <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Distance</div>
-                        <div style={{ fontSize: '14px', fontWeight: '700', color: '#fff' }}>{trackingDistance !== null ? `${trackingDistance.toFixed(1)} km` : '--'}</div>
-                      </div>
-                      <div style={{ background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.2)', borderRadius: '10px', padding: '8px 10px' }}>
-                        <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>ETA</div>
-                        <div style={{ fontSize: '14px', fontWeight: '700', color: '#fff' }}>{trackingEta !== null ? `${trackingEta} min` : '--'}</div>
-                      </div>
-                    </div>
+              {/* Location Cards */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
+                {/* Worker Location */}
+                <div style={{ background: 'var(--bg-input)', padding: '20px', borderRadius: '14px', border: '1px solid var(--border-grey)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+                    <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'rgba(255,107,0,0.15)', border: '1px solid rgba(255,107,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px' }}>👷</div>
+                    <span style={{ fontWeight: '700', color: '#fff', fontSize: '14px' }}>Your Location</span>
                   </div>
-
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    {jobStatus === 'assigned' && (
-                      <>
-                        <button 
-                          onClick={isSimulatingGps ? stopGpsSimulation : startGpsSimulation} 
-                          className="btn btn-primary"
-                          style={{ width: '100%', padding: '12px' }}
-                        >
-                          <Navigation size={16} />
-                          {isSimulatingGps ? 'Stop GPS Simulation' : 'Start Live GPS Simulation'}
-                        </button>
-                        <button 
-                          onClick={() => handleUpdateStatus('en_route')} 
-                          className="btn btn-secondary"
-                          style={{ width: '100%', padding: '12px' }}
-                        >
-                          Arrived at customer
-                        </button>
-                        <button 
-                          onClick={handleRejectJob}
-                          className="btn btn-secondary"
-                          style={{ width: '100%', padding: '12px', borderColor: 'var(--error-color)', color: 'var(--error-color)' }}
-                        >
-                          <XIcon size={16} style={{ marginRight: '6px' }} />
-                          Reject Job
-                        </button>
-                      </>
-                    )}
-
-                    {jobStatus === 'en_route' && (
-                      <div style={{ textAlign: 'center', padding: '12px', background: 'rgba(34,197,94,0.07)', borderRadius: '10px', border: '1px solid rgba(34,197,94,0.2)' }}>
-                        <p style={{ fontSize: '13px', color: '#86efac', marginBottom: '4px' }}>✅ You have arrived at the customer location.</p>
-                        <p style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Work in progress — the customer will confirm completion and make the payment.</p>
-                      </div>
-                    )}
-
-                    {isSimulatingGps && (
-                      <div style={{ textAlign: 'center', fontSize: '12px', color: 'var(--primary-orange)' }}>
-                        Simulating GPS vehicle coordinates movement towards destination...
-                        <p style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>Lat: {gpsLocation.latitude.toFixed(4)} | Lon: {gpsLocation.longitude.toFixed(4)}</p>
-                      </div>
-                    )}
-                  </div>
+                  <p style={{ fontSize: '11px', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
+                    GPS: {gpsLocation.latitude.toFixed(5)}, {gpsLocation.longitude.toFixed(5)}
+                  </p>
                 </div>
 
-                {/* Chat Column */}
-                <div className="worker-job-chat">
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '12px' }}>
-                    <MessageSquare size={16} color="var(--primary-orange)" />
-                    <h4 style={{ fontSize: '14px' }}>Chat with Customer</h4>
+                {/* Customer Location */}
+                <div style={{ background: 'var(--bg-input)', padding: '20px', borderRadius: '14px', border: '1px solid var(--border-grey)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+                    <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px' }}>🏠</div>
+                    <span style={{ fontWeight: '700', color: '#fff', fontSize: '14px' }}>Customer Location</span>
                   </div>
-
-                  <div className="chat-window" style={{ height: '340px' }}>
-                    <div className="chat-messages">
-                      {messages.length === 0 ? (
-                        <div style={{ fontSize: '12px', color: 'var(--text-muted)', fontStyle: 'italic', textAlign: 'center', marginTop: '40px' }}>
-                          Start typing to speak with customer.
-                        </div>
-                      ) : (
-                        messages.map((msg, i) => (
-                          <div key={i} className={`chat-bubble ${msg.sender}`} style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: '180px' }}>
-                            {msg.text && <div>{msg.text}</div>}
-                            {msg.voiceUrl && (
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <audio 
-                                  src={msg.voiceUrl.startsWith('http') ? msg.voiceUrl : `${API_URL}${msg.voiceUrl}`} 
-                                  controls 
-                                  style={{ width: '100%', height: '32px', minWidth: '150px' }} 
-                                />
-                                {msg.voiceDuration > 0 && (
-                                  <span style={{ fontSize: '10px', color: '#fff', opacity: 0.8 }}>
-                                    {Math.floor(msg.voiceDuration / 60)}:{(msg.voiceDuration % 60).toString().padStart(2, '0')}
-                                  </span>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        ))
-                      )}
-                      <div ref={chatEndRef} />
-                    </div>
-
-                    <form onSubmit={sendMessage} className="chat-input-area" style={{ display: 'flex', alignItems: 'center', padding: '4px 8px', background: 'var(--bg-input)' }}>
-                      {isChatRecording ? (
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '6px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                            <span 
-                              style={{ 
-                                width: '10px', 
-                                height: '10px', 
-                                borderRadius: '50%', 
-                                background: 'var(--error-color)', 
-                                animation: 'pulseMic 1s infinite' 
-                              }} 
-                            />
-                            <span style={{ fontSize: '13px', color: 'var(--text-primary)' }}>
-                              Recording ({chatRecordingDuration}s)...
-                            </span>
-                          </div>
-                          <div style={{ display: 'flex', gap: '6px' }}>
-                            <button 
-                              type="button" 
-                              className="btn btn-secondary" 
-                              onClick={() => stopChatRecording(false)}
-                              style={{ padding: '4px 8px', fontSize: '12px', borderColor: 'var(--error-color)', color: 'var(--error-color)' }}
-                            >
-                              Cancel
-                            </button>
-                            <button 
-                              type="button" 
-                              className="btn btn-primary" 
-                              onClick={() => stopChatRecording(true)}
-                              style={{ padding: '4px 8px', fontSize: '12px' }}
-                            >
-                              Send
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <>
-                          <input 
-                            type="text"
-                            placeholder="Type message..."
-                            value={newMessage}
-                            onChange={(e) => setNewMessage(e.target.value)}
-                            className="chat-input"
-                            style={{ flex: 1, border: 'none', background: 'transparent', color: '#fff', padding: '12px' }}
-                          />
-                          <button 
-                            type="button" 
-                            onClick={startChatRecording}
-                            style={{ background: 'none', border: 'none', padding: '0 8px', color: 'var(--text-secondary)', cursor: 'pointer' }}
-                            title="Record Voice Message"
-                          >
-                            <Mic size={18} />
-                          </button>
-                          <button type="submit" style={{ background: 'none', border: 'none', padding: '0 16px', color: 'var(--primary-orange)', cursor: 'pointer' }}>
-                            <Send size={16} />
-                          </button>
-                        </>
-                      )}
-                    </form>
-                  </div>
+                  <p style={{ fontSize: '13px', color: '#fff', fontWeight: '600', marginBottom: '6px' }}>
+                    {getAddressText(activeJob.location)}
+                  </p>
+                  <p style={{ fontSize: '11px', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
+                    GPS: {activeJob.location.latitude.toFixed(5)}, {activeJob.location.longitude.toFixed(5)}
+                  </p>
                 </div>
               </div>
+
+              {/* Simple Map */}
+              <div style={{ height: '300px', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--border-grey)' }}>
+                <MapContainer
+                  center={[gpsLocation.latitude, gpsLocation.longitude]}
+                  zoom={13}
+                  style={{ height: '100%', width: '100%' }}
+                >
+                  <TileLayer
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    attribution='&copy; OpenStreetMap contributors'
+                  />
+                  <Marker position={[gpsLocation.latitude, gpsLocation.longitude]}>
+                    <Popup>Your Location</Popup>
+                  </Marker>
+                  <Marker position={[activeJob.location.latitude, activeJob.location.longitude]}>
+                    <Popup>Customer Location</Popup>
+                  </Marker>
+                </MapContainer>
+              </div>
+
+              {/* Action Buttons */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '20px' }}>
+                {jobStatus === 'assigned' && (
+                  <>
+                    <button
+                      onClick={() => handleUpdateStatus('en_route')}
+                      className="btn btn-primary"
+                      style={{ width: '100%', padding: '12px' }}
+                    >
+                      Arrived at customer
+                    </button>
+                    <button
+                      onClick={handleRejectJob}
+                      className="btn btn-secondary"
+                      style={{ width: '100%', padding: '12px', borderColor: 'var(--error-color)', color: 'var(--error-color)' }}
+                    >
+                      <XIcon size={16} style={{ marginRight: '6px' }} />
+                      Reject Job
+                    </button>
+                  </>
+                )}
+
+                {jobStatus === 'en_route' && (
+                  <div style={{ textAlign: 'center', padding: '12px', background: 'rgba(34,197,94,0.07)', borderRadius: '10px', border: '1px solid rgba(34,197,94,0.2)' }}>
+                    <p style={{ fontSize: '13px', color: '#86efac', marginBottom: '4px' }}>✅ You have arrived at the customer location.</p>
+                    <p style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Work in progress — the customer will confirm completion and make the payment.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Chat Section */}
+            <div className="card card--padded" style={{ marginTop: '20px' }}>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '12px' }}>
+                <MessageSquare size={16} color="var(--primary-orange)" />
+                <h4 style={{ fontSize: '14px' }}>Chat with Customer</h4>
+              </div>
+
+              <div className="chat-window" style={{ height: '340px' }}>
+                <div className="chat-messages">
+                  {messages.length === 0 ? (
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', fontStyle: 'italic', textAlign: 'center', marginTop: '40px' }}>
+                      Start typing to speak with customer.
+                    </div>
+                  ) : (
+                    messages.map((msg, i) => (
+                      <div key={i} className={`chat-bubble ${msg.sender}`} style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: '180px' }}>
+                        {msg.text && <div>{msg.text}</div>}
+                        {msg.voiceUrl && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <audio
+                              src={msg.voiceUrl.startsWith('http') ? msg.voiceUrl : `${API_URL}${msg.voiceUrl}`}
+                              controls
+                              style={{ width: '100%', height: '32px', minWidth: '150px' }}
+                            />
+                            {msg.voiceDuration > 0 && (
+                              <span style={{ fontSize: '10px', color: '#fff', opacity: 0.8 }}>
+                                {Math.floor(msg.voiceDuration / 60)}:{(msg.voiceDuration % 60).toString().padStart(2, '0')}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )}
+                  <div ref={chatEndRef} />
+                </div>
+
+                <form onSubmit={sendMessage} className="chat-input-area" style={{ display: 'flex', alignItems: 'center', padding: '4px 8px', background: 'var(--bg-input)' }}>
+                  {isChatRecording ? (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '6px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <span
+                          style={{
+                            width: '10px',
+                            height: '10px',
+                            borderRadius: '50%',
+                            background: 'var(--error-color)',
+                            animation: 'pulseMic 1s infinite'
+                          }}
+                        />
+                        <span style={{ fontSize: '13px', color: 'var(--text-primary)' }}>
+                          Recording ({chatRecordingDuration}s)...
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          onClick={() => stopChatRecording(false)}
+                          style={{ padding: '4px 8px', fontSize: '12px', borderColor: 'var(--error-color)', color: 'var(--error-color)' }}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-primary"
+                          onClick={() => stopChatRecording(true)}
+                          style={{ padding: '4px 8px', fontSize: '12px' }}
+                        >
+                          Send
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <input
+                        type="text"
+                        placeholder="Type message..."
+                        value={newMessage}
+                        onChange={(e) => setNewMessage(e.target.value)}
+                        className="chat-input"
+                        style={{ flex: 1, border: 'none', background: 'transparent', color: '#fff', padding: '12px' }}
+                      />
+                      <button
+                        type="button"
+                        onClick={startChatRecording}
+                        style={{ background: 'none', border: 'none', padding: '0 8px', color: 'var(--text-secondary)', cursor: 'pointer' }}
+                        title="Record Voice Message"
+                      >
+                        <Mic size={18} />
+                      </button>
+                      <button type="submit" style={{ background: 'none', border: 'none', padding: '0 16px', color: 'var(--primary-orange)', cursor: 'pointer' }}>
+                        <Send size={16} />
+                      </button>
+                    </>
+                  )}
+                </form>
+              </div>
+            </div>
+            </>
           ) : (
             <EmptyState
               icon={Briefcase}
@@ -1340,8 +1558,8 @@ export default function WorkerDashboard({ user }) {
             </div>
           </div>
 
-          <div style={{ marginTop: '20px', display: 'flex', flexWrap: 'wrap', gap: '14px', alignItems: 'flex-end' }}>
-            <div style={{ flex: '1 1 320px' }}>
+          <div className="worker-dashboard-filter-row" style={{ marginTop: '20px', display: 'flex', flexWrap: 'wrap', gap: '14px', alignItems: 'flex-end' }}>
+            <div style={{ flex: '1 1 320px', minWidth: 0 }}>
               <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                 Search projects by city
               </label>
@@ -1356,7 +1574,7 @@ export default function WorkerDashboard({ user }) {
                 style={{ width: '100%', background: 'var(--bg-input)', border: '1px solid var(--border-grey)', borderRadius: '8px', padding: '10px 12px', color: '#f5f5f7', fontSize: '13px', fontFamily: 'inherit', boxSizing: 'border-box' }}
               />
             </div>
-            <div style={{ minWidth: '220px', color: 'var(--text-secondary)', fontSize: '13px' }}>
+            <div className="worker-dashboard-filter-hint" style={{ minWidth: '220px', color: 'var(--text-secondary)', fontSize: '13px' }}>
               {contractorCityFilter.trim()
                 ? `Filtering offers by city: "${contractorCityFilter.trim()}"`
                 : 'Showing all contractor offers.'}
@@ -1396,19 +1614,26 @@ export default function WorkerDashboard({ user }) {
                           <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{job.customer?.phone || 'No phone'}</div>
                         </td>
                         <td style={{ padding: '14px', maxWidth: '220px' }}>
-                          <div style={{ fontSize: '13px', color: '#fff', fontWeight: 600 }}>{job.location?.manualAddress || job.location?.address || 'Not provided'}</div>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedProjectLocation(job)}
+                            style={{ background: 'none', border: 'none', padding: 0, color: '#f59e0b', fontWeight: 600, textAlign: 'left', cursor: 'pointer', fontSize: '13px' }}
+                          >
+                            {job.location?.manualAddress || job.location?.address || 'Not provided'}
+                          </button>
+                          <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>Tap to view map</div>
                         </td>
                         <td style={{ padding: '14px' }}>
-                          <div style={{ fontSize: '13px', color: '#fff', fontWeight: 600 }}>PKR {job.payment?.amount?.toLocaleString() || 'N/A'}</div>
+                          <div style={{ fontSize: '13px', color: '#fff', fontWeight: 600 }}>PKR {job.payment?.basePrice?.toLocaleString() || job.payment?.amount?.toLocaleString() || 'N/A'}</div>
                         </td>
                         <td style={{ padding: '14px' }}>
                           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                             <button
-                              onClick={() => handleConstructionResponse(job._id, 'accept')}
+                              onClick={() => setSelectedBidJob(job)}
                               className="btn btn-primary"
                               style={{ minWidth: '110px', padding: '8px 12px', fontSize: '13px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
                             >
-                              <Check size={14} /> Accept
+                              <Briefcase size={14} /> Submit Bid
                             </button>
                             <button
                               onClick={() => handleConstructionResponse(job._id, 'reject')}
@@ -1426,6 +1651,58 @@ export default function WorkerDashboard({ user }) {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {selectedProjectLocation && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(7, 12, 24, 0.82)', zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}
+          onClick={() => setSelectedProjectLocation(null)}
+        >
+          <div
+            style={{ width: 'min(760px, 100%)', background: 'var(--bg-card)', border: '1px solid var(--border-grey)', borderRadius: '16px', padding: '20px', boxShadow: '0 20px 60px rgba(0,0,0,0.35)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', marginBottom: '14px' }}>
+              <div>
+                <h4 style={{ margin: 0, color: '#fff' }}>Construction site location</h4>
+                <p style={{ margin: '6px 0 0', color: 'var(--text-secondary)', fontSize: '13px' }}>
+                  {selectedProjectLocation.location?.manualAddress || selectedProjectLocation.location?.address || 'Address not provided'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedProjectLocation(null)}
+                style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', padding: '4px' }}
+                aria-label="Close map"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div style={{ height: '340px', width: '100%', borderRadius: '12px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.12)' }}>
+              {selectedProjectLocation.location?.latitude != null && selectedProjectLocation.location?.longitude != null ? (
+                <MapContainer
+                  center={[Number(selectedProjectLocation.location.latitude), Number(selectedProjectLocation.location.longitude)]}
+                  zoom={14}
+                  style={{ height: '100%', width: '100%' }}
+                >
+                  <TileLayer
+                    attribution='&copy; OpenStreetMap contributors'
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  />
+                  <Marker position={[Number(selectedProjectLocation.location.latitude), Number(selectedProjectLocation.location.longitude)]}>
+                    <Popup>
+                      {selectedProjectLocation.location?.manualAddress || selectedProjectLocation.location?.address || 'Construction site'}
+                    </Popup>
+                  </Marker>
+                </MapContainer>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-secondary)', padding: '20px', textAlign: 'center' }}>
+                  Coordinates are not available for this project yet.
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
@@ -1450,14 +1727,14 @@ export default function WorkerDashboard({ user }) {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                 {visibleConstruction.map((project) => (
                   <div key={project._id} className="card" style={{ border: '1px solid var(--border-grey)', padding: '20px' }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                    <div className="worker-project-card-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '20px' }}>
                       {/* Project Details */}
                       <div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                           <h4 style={{ fontSize: '16px', color: '#fff' }}>{project.category}</h4>
                           <StatusBadge status={project.status} />
                         </div>
-                        
+
                         <div style={{ marginBottom: '12px' }}>
                           <span className="form-label" style={{ fontSize: '11px' }}>Project Description</span>
                           <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>{project.description}</p>
@@ -1484,7 +1761,7 @@ export default function WorkerDashboard({ user }) {
                         </div>
 
                         {project.status === 'pending_acceptance' && (
-                          <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
+                          <div className="worker-project-action-row" style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
                             <button
                               onClick={() => handleConstructionResponse(project._id, 'accept')}
                               className="btn btn-primary"
@@ -1559,59 +1836,59 @@ export default function WorkerDashboard({ user }) {
 
       {activeTab === 'history' && (
         <div className="card card--padded">
-            <div className="section-header">
-              <ListChecks size={20} color="var(--primary-orange)" />
-              <div className="section-header__text">
-                <h3>Service History</h3>
-                <p>Your recent jobs, payments, and completed service log.</p>
-              </div>
+          <div className="section-header">
+            <ListChecks size={20} color="var(--primary-orange)" />
+            <div className="section-header__text">
+              <h3>Service History</h3>
+              <p>Your recent jobs, payments, and completed service log.</p>
             </div>
-            {historyLoading ? (
-              <TableSkeleton rows={4} cols={5} />
-            ) : jobsHistory.length === 0 ? (
-              <EmptyState
-                icon={ListChecks}
-                title="No service history yet"
-                description="Completed and assigned jobs will appear here."
-              />
-            ) : (
-              <>
-                <div className="data-table-wrap">
-                  <table className="data-table">
-                    <thead>
-                      <tr style={{ borderBottom: '1px solid var(--border-grey)', color: 'var(--text-secondary)' }}>
-                        <th style={{ padding: '12px' }}>Service</th>
-                        <th style={{ padding: '12px' }}>Customer</th>
-                        <th style={{ padding: '12px' }}>Date</th>
-                        <th style={{ padding: '12px' }}>Status</th>
-                        <th style={{ padding: '12px' }}>Payment</th>
+          </div>
+          {historyLoading ? (
+            <TableSkeleton rows={4} cols={5} />
+          ) : jobsHistory.length === 0 ? (
+            <EmptyState
+              icon={ListChecks}
+              title="No service history yet"
+              description="Completed and assigned jobs will appear here."
+            />
+          ) : (
+            <>
+              <div className="data-table-wrap">
+                <table className="data-table">
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid var(--border-grey)', color: 'var(--text-secondary)' }}>
+                      <th style={{ padding: '12px' }}>Service</th>
+                      <th style={{ padding: '12px' }}>Customer</th>
+                      <th style={{ padding: '12px' }}>Date</th>
+                      <th style={{ padding: '12px' }}>Status</th>
+                      <th style={{ padding: '12px' }}>Payment</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visibleHistory.map((job) => (
+                      <tr key={job._id} style={{ borderBottom: '1px solid var(--border-grey)' }}>
+                        <td style={{ padding: '12px' }}>{job.category}</td>
+                        <td style={{ padding: '12px' }}>{job.customer?.name || 'Customer'}</td>
+                        <td style={{ padding: '12px' }}>{new Date(job.createdAt).toLocaleDateString()}</td>
+                        <td><StatusBadge status={job.status} /></td>
+                        <td style={{ padding: '12px' }}>
+                          {job.payment.status === 'paid' ? `Paid PKR ${job.payment.amount}` : `Held PKR ${job.payment.amount}`}
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {visibleHistory.map((job) => (
-                        <tr key={job._id} style={{ borderBottom: '1px solid var(--border-grey)' }}>
-                          <td style={{ padding: '12px' }}>{job.category}</td>
-                          <td style={{ padding: '12px' }}>{job.customer?.name || 'Customer'}</td>
-                          <td style={{ padding: '12px' }}>{new Date(job.createdAt).toLocaleDateString()}</td>
-                          <td><StatusBadge status={job.status} /></td>
-                          <td style={{ padding: '12px' }}>
-                            {job.payment.status === 'paid' ? `Paid PKR ${job.payment.amount}` : `Held PKR ${job.payment.amount}`}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <Pagination
-                  page={historyPage}
-                  totalPages={historyTotalPages}
-                  totalItems={jobsHistory.length}
-                  pageSize={itemsPerPage}
-                  onPageChange={setHistoryPage}
-                  itemLabel="records"
-                />
-              </>
-            )}
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <Pagination
+                page={historyPage}
+                totalPages={historyTotalPages}
+                totalItems={jobsHistory.length}
+                pageSize={itemsPerPage}
+                onPageChange={setHistoryPage}
+                itemLabel="records"
+              />
+            </>
+          )}
         </div>
       )}
 
@@ -1692,7 +1969,7 @@ export default function WorkerDashboard({ user }) {
             {/* Progress indicators */}
             <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', margin: '10px 0' }}>
               {workerSteps.map((_, index) => (
-                <div 
+                <div
                   key={index}
                   style={{
                     width: '8px',
@@ -1706,15 +1983,15 @@ export default function WorkerDashboard({ user }) {
             </div>
 
             <div style={{ display: 'flex', gap: '12px', marginTop: '10px' }}>
-              <button 
-                className="btn btn-secondary" 
+              <button
+                className="btn btn-secondary"
                 onClick={handleTutorialFinish}
                 style={{ flex: 1 }}
               >
                 Skip
               </button>
-              <button 
-                className="btn btn-primary" 
+              <button
+                className="btn btn-primary"
                 onClick={handleTutorialNext}
                 style={{ flex: 2 }}
               >
@@ -1725,6 +2002,66 @@ export default function WorkerDashboard({ user }) {
         </div>
       )}
 
+      {selectedBidJob && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(7, 12, 24, 0.82)', zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}
+          onClick={() => setSelectedBidJob(null)}
+        >
+          <div
+            style={{ width: 'min(500px, 100%)', background: 'var(--bg-card)', border: '1px solid var(--border-grey)', borderRadius: '16px', padding: '24px', boxShadow: '0 20px 60px rgba(0,0,0,0.35)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+              <h3 style={{ margin: 0, color: '#fff' }}>Submit Bid for {selectedBidJob.category}</h3>
+              <button
+                type="button"
+                onClick={() => setSelectedBidJob(null)}
+                style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '4px' }}
+              >
+                <XIcon size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleBidSubmit}>
+              <div className="form-group" style={{ marginBottom: '16px' }}>
+                <label className="form-label">Bid Amount (PKR)</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  value={bidForm.bidAmount}
+                  onChange={e => setBidForm({ ...bidForm, bidAmount: e.target.value })}
+                  placeholder="Your price for the project"
+                  required
+                />
+              </div>
+              <div className="form-group" style={{ marginBottom: '16px' }}>
+                <label className="form-label">Estimated Completion (Days)</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  value={bidForm.completionDays}
+                  onChange={e => setBidForm({ ...bidForm, completionDays: e.target.value })}
+                  placeholder="e.g. 15"
+                  required
+                />
+              </div>
+              <div className="form-group" style={{ marginBottom: '24px' }}>
+                <label className="form-label">Additional Notes</label>
+                <textarea
+                  className="form-input"
+                  value={bidForm.notes}
+                  onChange={e => setBidForm({ ...bidForm, notes: e.target.value })}
+                  placeholder="Any conditions or details about your bid..."
+                  style={{ minHeight: '80px', resize: 'vertical' }}
+                />
+              </div>
+              <button type="submit" className="btn btn-primary" style={{ width: '100%', padding: '12px' }}>
+                Submit Bid
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </DashboardLayout>
   );
 }

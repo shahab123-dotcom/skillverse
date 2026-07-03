@@ -150,8 +150,22 @@ router.post('/confirm-payment', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Job not found' });
     }
 
-    // Calculate platform fee (10%) and worker amount (90%)
-    const breakdown = computePaymentBreakdown(job.payment.amount);
+    // Calculate platform fee and worker amount based on job type
+    let breakdown;
+    if (job.type === 'construction') {
+      // For construction, worker amount is the bid amount, platform fee is the rest
+      const totalAmount = job.payment.amount || 0;
+      const workerAmount = job.payment.workerAmount || 0; // Set during admin approval
+      const platformFee = Math.max(0, totalAmount - workerAmount);
+      const paidAt = new Date();
+      const holdDays = process.env.ESCROW_HOLD_MINUTES ? Number(process.env.ESCROW_HOLD_MINUTES) / (60 * 24) : Number(process.env.ESCROW_HOLD_DAYS) || 1;
+      const holdMs = process.env.ESCROW_HOLD_MINUTES ? Number(process.env.ESCROW_HOLD_MINUTES) * 60 * 1000 : holdDays * 24 * 60 * 60 * 1000;
+      const releaseAt = new Date(paidAt.getTime() + holdMs);
+      const holdLabel = process.env.ESCROW_HOLD_MINUTES ? `${process.env.ESCROW_HOLD_MINUTES} minute(s)` : `${holdDays} day(s)`;
+      breakdown = { platformFee, workerAmount, paidAt, releaseAt, holdDays, holdLabel };
+    } else {
+      breakdown = computePaymentBreakdown(job.payment.amount);
+    }
 
     console.log(`Updating job payment - Amount: ${job.payment.amount}, Worker: ${breakdown.workerAmount}, Platform: ${breakdown.platformFee}, Release: ${breakdown.releaseAt}`);
 
@@ -175,7 +189,7 @@ router.post('/confirm-payment', authenticateToken, async (req, res) => {
     console.log(`Payment confirmed successfully for job: ${jobId}`);
 
     res.json({
-      message: `Payment confirmed. Funds held ${breakdown.holdLabel}. Worker receives 90% (PKR ${breakdown.workerAmount}) after hold.`,
+      message: `Payment confirmed. Funds held ${breakdown.holdLabel}. Worker receives PKR ${breakdown.workerAmount} after hold.`,
       job: updatedJob,
       breakdown: {
         platformFee: breakdown.platformFee,
