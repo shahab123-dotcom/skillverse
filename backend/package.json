@@ -16,6 +16,7 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.4.1",
     "multer": "^1.4.5-lts.1",
+    "skillsverse-root": "file:..",
     "socket.io": "^4.7.5",
     "stripe": "^22.2.2"
   },
