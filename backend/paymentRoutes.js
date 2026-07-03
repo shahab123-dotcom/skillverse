@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const stripe = process.env.STRIPE_SECRET_KEY
+  ? require('stripe')(process.env.STRIPE_SECRET_KEY)
+  : null;
 const jwt = require('jsonwebtoken');
 const { Job } = require('./models');
 const { computePaymentBreakdown } = require('./escrow');
@@ -52,6 +54,11 @@ router.post('/create-payment-intent', authenticateToken, async (req, res) => {
     console.log(`User ID: ${req.user.id}`);
     console.log(`Job ID: ${jobId}`);
     if (amount) console.log(`Negotiated Amount: ${amount}`);
+
+    if (!stripe) {
+      console.error('Stripe is not configured. Missing STRIPE_SECRET_KEY environment variable.');
+      return res.status(500).json({ error: 'Stripe payment integration is not configured on the server.' });
+    }
 
     if (!jobId) {
       console.error('Job ID is missing');
@@ -121,6 +128,11 @@ router.post('/create-payment-intent', authenticateToken, async (req, res) => {
 router.post('/confirm-payment', authenticateToken, async (req, res) => {
   try {
     const { jobId, paymentIntentId } = req.body;
+
+    if (!stripe) {
+      console.error('Stripe is not configured. Missing STRIPE_SECRET_KEY environment variable.');
+      return res.status(500).json({ error: 'Stripe payment integration is not configured on the server.' });
+    }
 
     if (!jobId || !paymentIntentId) {
       console.warn('Missing required fields:', { jobId, paymentIntentId });
