@@ -569,7 +569,9 @@ router.get('/jobs/customer', authenticateToken, async (req, res) => {
   try {
     if (req.user.role !== 'customer') return res.status(403).json({ error: 'Customer access required' });
     await checkAndReleasePayments();
-    const jobs = await Job.find({ customer: req.user.id }).populate('worker', 'name phone latitude longitude').sort({ createdAt: -1 });
+    const jobs = await Job.find({ customer: req.user.id })
+      .populate('worker', 'name phone latitude longitude averageRating totalReviews')
+      .sort({ createdAt: -1 });
     res.json(jobs);
   } catch (error) {
     res.status(500).json({ error: 'Failed to retrieve jobs' });

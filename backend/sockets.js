@@ -93,7 +93,9 @@ module.exports = (io) => {
               name: worker.name,
               phone: worker.phone,
               latitude: worker.latitude,
-              longitude: worker.longitude
+              longitude: worker.longitude,
+              averageRating: worker.averageRating,
+              totalReviews: worker.totalReviews
             }
           });
         }

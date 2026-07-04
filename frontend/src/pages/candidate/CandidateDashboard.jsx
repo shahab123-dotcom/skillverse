@@ -59,6 +59,7 @@ export default function CustomerDashboard({ user }) {
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [feedbackJob, setFeedbackJob] = useState(null);
   const [feedbackRating, setFeedbackRating] = useState(5);
+  const [feedbackHover, setFeedbackHover] = useState(0);
   const [feedbackText, setFeedbackText] = useState('');
   const [submittingFeedback, setSubmittingFeedback] = useState(false);
   // Completion modal state
@@ -1268,19 +1269,85 @@ export default function CustomerDashboard({ user }) {
                 )}
 
                 {dispatchStatus === 'accepted' && workerCoords && (
-                  <div style={{ background: 'var(--bg-input)', padding: '20px', borderRadius: '14px', border: '1px solid rgba(255,107,0,0.25)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-                      <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'rgba(255,107,0,0.15)', border: '1px solid rgba(255,107,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px' }}>👷</div>
-                      <span style={{ fontWeight: '700', color: '#fff', fontSize: '14px' }}>Assigned Worker</span>
+                  <div style={{
+                    background: 'linear-gradient(135deg, rgba(255,107,0,0.08), rgba(255,107,0,0.03))',
+                    padding: '16px',
+                    borderRadius: '14px',
+                    border: '1px solid rgba(255,107,0,0.3)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '12px'
+                  }}>
+                    {/* Header row */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <div style={{
+                        width: '46px', height: '46px', borderRadius: '50%', flexShrink: 0,
+                        background: 'linear-gradient(135deg, rgba(255,107,0,0.25), rgba(255,107,0,0.1))',
+                        border: '2px solid rgba(255,107,0,0.5)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px'
+                      }}>👷</div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          <span style={{ fontWeight: '700', color: '#fff', fontSize: '15px' }}>
+                            {workerDetails?.name || 'Worker'}
+                          </span>
+                          <span style={{
+                            background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.4)',
+                            color: '#10b981', fontSize: '10px', fontWeight: '700',
+                            padding: '2px 8px', borderRadius: '20px', letterSpacing: '0.04em'
+                          }}>● ON THE WAY</span>
+                        </div>
+                        {workerDetails?.category && (
+                          <span style={{ fontSize: '12px', color: 'var(--primary-orange)', fontWeight: '600' }}>
+                            {workerDetails.category}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <p style={{ fontSize: '14px', color: '#fff', fontWeight: '700', marginBottom: '6px' }}>
-                      {workerDetails?.name || 'Worker'}
-                    </p>
-                    <p style={{ fontSize: '11px', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
-                      GPS: {Number(workerCoords.latitude).toFixed(5)}, {Number(workerCoords.longitude).toFixed(5)}
-                    </p>
+
+                    {/* Star Rating */}
+                    <div style={{
+                      background: 'rgba(0,0,0,0.2)', borderRadius: '10px',
+                      padding: '10px 14px', display: 'flex', alignItems: 'center', gap: '10px'
+                    }}>
+                      <div style={{ display: 'flex', gap: '2px' }}>
+                        {[1,2,3,4,5].map(s => {
+                          const rating = workerDetails?.averageRating || 0;
+                          const filled = s <= Math.floor(rating);
+                          const half = !filled && s <= Math.ceil(rating) && rating % 1 >= 0.4;
+                          return (
+                            <span key={s} style={{
+                              fontSize: '18px',
+                              color: filled || half ? '#fbbf24' : 'rgba(255,255,255,0.15)',
+                              filter: filled || half ? 'drop-shadow(0 0 4px rgba(251,191,36,0.5))' : 'none'
+                            }}>★</span>
+                          );
+                        })}
+                      </div>
+                      {workerDetails?.averageRating ? (
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                          <span style={{ fontWeight: '700', color: '#fbbf24', fontSize: '15px', lineHeight: 1 }}>
+                            {Number(workerDetails.averageRating).toFixed(1)}
+                          </span>
+                          <span style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                            {workerDetails.totalReviews || 0} review{(workerDetails.totalReviews || 0) !== 1 ? 's' : ''}
+                          </span>
+                        </div>
+                      ) : (
+                        <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>No ratings yet</span>
+                      )}
+                    </div>
+
+                    {/* GPS */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
+                        <MapPin size={11} style={{ color: 'var(--primary-orange)', flexShrink: 0 }} />
+                        GPS: {Number(workerCoords.latitude).toFixed(5)}, {Number(workerCoords.longitude).toFixed(5)}
+                      </div>
+                    </div>
                   </div>
                 )}
+
               </div>
 
               {/* Simple Map */}
@@ -1497,6 +1564,7 @@ export default function CustomerDashboard({ user }) {
                       <th style={{ padding: '12px' }}>Worker</th>
                       <th style={{ padding: '12px' }}>Status</th>
                       <th style={{ padding: '12px' }}>Payment</th>
+                      <th style={{ padding: '12px' }}>Your Review</th>
                       <th style={{ padding: '12px' }}>Action</th>
                     </tr>
                   </thead>
@@ -1544,6 +1612,52 @@ export default function CustomerDashboard({ user }) {
                               </span>
                             )}
                           </div>
+                        </td>
+                        <td style={{ padding: '12px' }}>
+                          {job.review?.rating ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                              <div style={{ display: 'flex', gap: '2px' }}>
+                                {[1,2,3,4,5].map(s => (
+                                  <span key={s} style={{ fontSize: '16px', color: s <= job.review.rating ? '#fbbf24' : 'var(--text-muted)' }}>★</span>
+                                ))}
+                              </div>
+                              {job.review.feedback && (
+                                <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontStyle: 'italic', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  "{job.review.feedback}"
+                                </span>
+                              )}
+                            </div>
+                          ) : job.status === 'completed' && job.worker ? (
+                            <button
+                              onClick={() => {
+                                setFeedbackJob(job);
+                                setFeedbackRating(5);
+                                setFeedbackText('');
+                                setShowFeedbackModal(true);
+                              }}
+                              style={{
+                                background: 'linear-gradient(135deg, rgba(251,191,36,0.15), rgba(251,191,36,0.05))',
+                                border: '1px solid rgba(251,191,36,0.4)',
+                                borderRadius: '8px',
+                                padding: '6px 10px',
+                                color: '#fbbf24',
+                                fontSize: '12px',
+                                fontWeight: '600',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '5px',
+                                transition: 'all 0.2s ease',
+                                whiteSpace: 'nowrap'
+                              }}
+                              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(251,191,36,0.25)'; e.currentTarget.style.borderColor = '#fbbf24'; }}
+                              onMouseLeave={e => { e.currentTarget.style.background = 'linear-gradient(135deg, rgba(251,191,36,0.15), rgba(251,191,36,0.05))'; e.currentTarget.style.borderColor = 'rgba(251,191,36,0.4)'; }}
+                            >
+                              ★ Leave Review
+                            </button>
+                          ) : (
+                            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>—</span>
+                          )}
                         </td>
                         <td style={{ padding: '12px' }}>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -1765,58 +1879,100 @@ export default function CustomerDashboard({ user }) {
 
       {/* Feedback Modal */}
       {showFeedbackModal && feedbackJob && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
-          background: 'rgba(0,0,0,0.80)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
-        }}>
-          <div style={{
-            background: 'var(--bg-card)', padding: '24px', borderRadius: '16px',
-            width: '100%', maxWidth: '420px', border: '1px solid var(--border-grey)'
-          }}>
-            <h3 style={{ fontSize: '20px', marginBottom: '16px', color: '#fff' }}>Rate your Worker</h3>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '13px', marginBottom: '20px' }}>
-              How was your experience with {feedbackJob.worker?.name || 'the worker'}?
-            </p>
-            
+        <div
+          style={{
+            position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
+            background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center',
+            justifyContent: 'center', zIndex: 2000, backdropFilter: 'blur(6px)'
+          }}
+          onClick={() => { setShowFeedbackModal(false); setFeedbackJob(null); setFeedbackHover(0); }}
+        >
+          <div
+            style={{
+              background: 'var(--bg-card)', padding: '32px 28px', borderRadius: '20px',
+              width: '100%', maxWidth: '440px',
+              border: '1px solid rgba(251,191,36,0.25)',
+              boxShadow: '0 24px 60px rgba(0,0,0,0.5)'
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+              <div style={{
+                width: '64px', height: '64px', borderRadius: '50%',
+                background: 'linear-gradient(135deg, rgba(251,191,36,0.2), rgba(251,191,36,0.05))',
+                border: '2px solid rgba(251,191,36,0.4)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '28px', margin: '0 auto 14px'
+              }}>👷</div>
+              <h3 style={{ fontSize: '22px', fontWeight: '700', color: '#fff', margin: '0 0 6px' }}>Rate Your Experience</h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '13px', margin: 0 }}>
+                How was your experience with <strong style={{ color: '#fff' }}>{feedbackJob.worker?.name || 'the worker'}</strong>?
+              </p>
+            </div>
+
             <form onSubmit={handleFeedbackSubmit}>
-              <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', justifyContent: 'center' }}>
-                {[1, 2, 3, 4, 5].map(star => (
-                  <button
-                    key={star}
-                    type="button"
-                    onClick={() => setFeedbackRating(star)}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      fontSize: '32px',
-                      color: star <= feedbackRating ? '#fbbf24' : 'var(--text-muted)',
-                      cursor: 'pointer',
-                      transition: 'color 0.2s ease',
-                      outline: 'none'
-                    }}
-                  >
-                    ★
-                  </button>
-                ))}
+              {/* Star Rating */}
+              <div style={{ textAlign: 'center', marginBottom: '8px' }}>
+                <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', marginBottom: '8px' }}>
+                  {[1, 2, 3, 4, 5].map(star => (
+                    <button
+                      key={star}
+                      type="button"
+                      onClick={() => setFeedbackRating(star)}
+                      onMouseEnter={() => setFeedbackHover(star)}
+                      onMouseLeave={() => setFeedbackHover(0)}
+                      style={{
+                        background: 'none', border: 'none', padding: '4px',
+                        fontSize: '40px', cursor: 'pointer', outline: 'none',
+                        color: star <= (feedbackHover || feedbackRating) ? '#fbbf24' : 'rgba(255,255,255,0.15)',
+                        transform: star <= (feedbackHover || feedbackRating) ? 'scale(1.15)' : 'scale(1)',
+                        transition: 'all 0.15s ease',
+                        display: 'inline-block',
+                        filter: star <= (feedbackHover || feedbackRating) ? 'drop-shadow(0 0 8px rgba(251,191,36,0.6))' : 'none'
+                      }}
+                    >
+                      ★
+                    </button>
+                  ))}
+                </div>
+                <p style={{
+                  fontSize: '13px', fontWeight: '600', margin: 0,
+                  color: feedbackRating >= 4 ? '#10b981' : feedbackRating === 3 ? '#fbbf24' : '#ef4444'
+                }}>
+                  {feedbackRating === 5 ? '🌟 Excellent!' :
+                   feedbackRating === 4 ? '😊 Good' :
+                   feedbackRating === 3 ? '😐 Average' :
+                   feedbackRating === 2 ? '😕 Below Average' : '😞 Poor'}
+                </p>
               </div>
 
-              <div className="form-group">
-                <label className="form-label">Feedback (Optional)</label>
+              {/* Divider */}
+              <div style={{ borderTop: '1px solid var(--border-grey)', margin: '20px 0' }} />
+
+              {/* Written Feedback */}
+              <div className="form-group" style={{ marginBottom: '20px' }}>
+                <label className="form-label" style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <MessageSquare size={14} style={{ color: 'var(--primary-orange)' }} />
+                  Written Feedback <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(Optional)</span>
+                </label>
                 <textarea
                   className="form-input"
-                  placeholder="Share details of your experience..."
+                  placeholder="Tell others about your experience — quality of work, punctuality, professionalism..."
                   value={feedbackText}
                   onChange={(e) => setFeedbackText(e.target.value)}
                   rows={3}
+                  style={{ resize: 'none' }}
                 />
               </div>
 
-              <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
+              {/* Actions */}
+              <div style={{ display: 'flex', gap: '12px' }}>
                 <button
                   type="button"
                   className="btn btn-secondary"
                   style={{ flex: 1 }}
-                  onClick={() => { setShowFeedbackModal(false); setFeedbackJob(null); }}
+                  onClick={() => { setShowFeedbackModal(false); setFeedbackJob(null); setFeedbackHover(0); }}
                   disabled={submittingFeedback}
                 >
                   Skip
@@ -1824,10 +1980,14 @@ export default function CustomerDashboard({ user }) {
                 <button
                   type="submit"
                   className="btn btn-primary"
-                  style={{ flex: 1 }}
+                  style={{ flex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
                   disabled={submittingFeedback}
                 >
-                  {submittingFeedback ? 'Submitting...' : 'Submit Review'}
+                  {submittingFeedback ? (
+                    <><span style={{ width: 16, height: 16, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} /> Submitting...</>
+                  ) : (
+                    <> ★ Submit Review</>
+                  )}
                 </button>
               </div>
             </form>
