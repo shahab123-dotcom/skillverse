@@ -1113,7 +1113,7 @@ export default function CustomerDashboard({ user }) {
                 </div>
 
                 {/* 3. Address input & description */}
-                <div style={{ borderTop: '1px solid var(--border-grey)', paddingTop: '20px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                <div className="candidate-form-grid" style={{ borderTop: '1px solid var(--border-grey)', paddingTop: '20px' }}>
                   <div className="form-group">
                     <label className="form-label">Written Details (Optional)</label>
                     <textarea 
@@ -1126,7 +1126,7 @@ export default function CustomerDashboard({ user }) {
                     />
                   </div>
                   <div className="form-group">
-                    <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label className="form-label candidate-form-label-inline">
                       <span>Service Location</span>
                       <button
                         type="button"
@@ -1244,7 +1244,7 @@ export default function CustomerDashboard({ user }) {
               </div>
 
               {/* Location Cards */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
+              <div className="candidate-form-grid" style={{ marginBottom: '20px' }}>
                 {/* Customer Location */}
                 <div style={{ background: 'var(--bg-input)', padding: '20px', borderRadius: '14px', border: '1px solid var(--border-grey)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
@@ -1420,7 +1420,7 @@ export default function CustomerDashboard({ user }) {
             </p>
 
             <form onSubmit={handleConstructionSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+              <div className="candidate-form-grid">
                 <div className="form-group">
                   <label className="form-label">Category</label>
                   <select 
@@ -1450,7 +1450,7 @@ export default function CustomerDashboard({ user }) {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+              <div className="candidate-form-grid">
                 <div className="form-group">
                   <label className="form-label">Estimated Budget (PKR)</label>
                   <input 
@@ -1476,7 +1476,7 @@ export default function CustomerDashboard({ user }) {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginTop: '20px' }}>
+              <div className="candidate-form-grid" style={{ marginTop: '20px' }}>
                 <div className="form-group">
                   <label className="form-label">Residence Area</label>
                   <input 

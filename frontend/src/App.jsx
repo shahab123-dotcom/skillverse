@@ -22,8 +22,10 @@ export const API_URL = getApiBaseUrl();
 
 function Navigation({ user, logout }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  const isActive = (path) => location.pathname === path;
   const handleLogout = () => {
     logout();
     navigate('/');
@@ -46,23 +48,23 @@ function Navigation({ user, logout }) {
       </button>
 
       <nav className={`nav-links ${mobileMenuOpen ? 'nav-links--open' : ''}`}>
-        <Link to="/" className="nav-link" onClick={() => setMobileMenuOpen(false)}>Home</Link>
-        <Link to="/about" className="nav-link" onClick={() => setMobileMenuOpen(false)}>About</Link>
+        <Link to="/" className={`nav-link ${isActive('/') ? 'nav-link--active' : ''}`} onClick={() => setMobileMenuOpen(false)}>Home</Link>
+        <Link to="/about" className={`nav-link ${isActive('/about') ? 'nav-link--active' : ''}`} onClick={() => setMobileMenuOpen(false)}>About</Link>
         {user ? (
           <>
             {user.role === 'customer' && (
-              <Link to="/customer" className="nav-link flex items-center gap-1" onClick={() => setMobileMenuOpen(false)}>
+              <Link to="/customer" className={`nav-link flex items-center gap-1 ${isActive('/customer') ? 'nav-link--active' : ''}`} onClick={() => setMobileMenuOpen(false)}>
                 <Compass size={16} /> Customer Portal
               </Link>
             )}
             {user.role === 'worker' && (
-              <Link to="/worker" className="nav-link flex items-center gap-1" onClick={() => setMobileMenuOpen(false)}>
+              <Link to="/worker" className={`nav-link flex items-center gap-1 ${isActive('/worker') ? 'nav-link--active' : ''}`} onClick={() => setMobileMenuOpen(false)}>
                 {user.isContractor ? <Building2 size={16} /> : <HardHat size={16} />}
                 {user.isContractor ? 'Contractor Workspace' : 'Worker Workspace'}
               </Link>
             )}
             {user.role === 'admin' && (
-              <Link to="/admin" className="nav-link flex items-center gap-1" onClick={() => setMobileMenuOpen(false)}>
+              <Link to="/admin" className={`nav-link flex items-center gap-1 ${isActive('/admin') ? 'nav-link--active' : ''}`} onClick={() => setMobileMenuOpen(false)}>
                 <Shield size={16} /> Admin panel
               </Link>
             )}
@@ -78,10 +80,10 @@ function Navigation({ user, logout }) {
           </>
         ) : (
           <>
-            <Link to="/admin/login" className="nav-link nav-link--admin flex items-center gap-1" onClick={() => setMobileMenuOpen(false)}>
+            <Link to="/admin/login" className={`nav-link nav-link--admin flex items-center gap-1 ${isActive('/admin/login') ? 'nav-link--active' : ''}`} onClick={() => setMobileMenuOpen(false)}>
               <Shield size={16} /> Admin
             </Link>
-            <Link to="/auth" className="btn btn-primary" style={{ padding: '8px 16px' }} onClick={() => setMobileMenuOpen(false)}>
+            <Link to="/auth" className="btn btn-primary nav-cta" style={{ padding: '8px 16px' }} onClick={() => setMobileMenuOpen(false)}>
               Get Started
             </Link>
           </>
