@@ -1282,7 +1282,7 @@ export default function WorkerDashboard({ user }) {
                 {contractorError && <div style={{ color: 'var(--error-color)', fontSize: '13px', marginBottom: '16px' }}>{contractorError}</div>}
                 {contractorSuccess && <div style={{ color: 'var(--success-color)', fontSize: '13px', marginBottom: '16px' }}>{contractorSuccess}</div>}
                 <form onSubmit={handleContractorSubmit} style={{ display: 'grid', gap: '16px' }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div className="worker-mobile-stack">
                     <div className="form-group">
                       <label className="form-label">Company Name</label>
                       <input type="text" className="form-input" value={contractorForm.companyName} onChange={e => setContractorForm({ ...contractorForm, companyName: e.target.value })} required />
@@ -1292,7 +1292,7 @@ export default function WorkerDashboard({ user }) {
                       <input type="number" className="form-input" value={contractorForm.experienceYears} onChange={e => setContractorForm({ ...contractorForm, experienceYears: e.target.value })} required />
                     </div>
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div className="worker-mobile-stack">
                     <div className="form-group">
                       <label className="form-label">Specialization</label>
                       <input type="text" className="form-input" placeholder="e.g. Structural, Plumbing" value={contractorForm.specialization} onChange={e => setContractorForm({ ...contractorForm, specialization: e.target.value })} required />
@@ -1305,7 +1305,7 @@ export default function WorkerDashboard({ user }) {
                       </select>
                     </div>
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div className="worker-mobile-stack">
                     <div className="form-group">
                       <label className="form-label">Residence Area</label>
                       <input type="text" className="form-input" placeholder="e.g. Clifton Block 5" value={contractorForm.residenceArea} onChange={e => setContractorForm({ ...contractorForm, residenceArea: e.target.value })} required />
@@ -1339,7 +1339,7 @@ export default function WorkerDashboard({ user }) {
               </div>
 
               {/* Location Cards */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
+              <div className="worker-mobile-stack" style={{ marginBottom: '20px' }}>
                 {/* Worker Location */}
                 <div style={{ background: 'var(--bg-input)', padding: '20px', borderRadius: '14px', border: '1px solid var(--border-grey)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>

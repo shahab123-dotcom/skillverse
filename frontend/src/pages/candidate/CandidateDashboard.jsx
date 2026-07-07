@@ -299,8 +299,13 @@ export default function CustomerDashboard({ user }) {
   const handlePaymentSuccess = (data) => {
     setShowPaymentModal(false);
     loadHistory();
-    if (data?.job) {
-      setActiveJob(data.job);
+    const completedJob = data?.job || activeJob;
+    if (completedJob) {
+      setActiveJob(completedJob);
+      setFeedbackJob(completedJob);
+      setFeedbackRating(5);
+      setFeedbackText('');
+      setShowFeedbackModal(true);
     }
     setActiveTab('history');
   };
@@ -947,12 +952,12 @@ export default function CustomerDashboard({ user }) {
       const data = await response.json();
       if (response.ok) {
         toast.success('Job marked as completed');
-        setActiveJob(data.job || activeJob);
+        const completedJob = data.job || activeJob;
+        setActiveJob(completedJob);
         setDispatchStatus('completed');
-        setFeedbackJob(data.job || activeJob);
-        setFeedbackRating(5);
-        setFeedbackText('');
-        setShowFeedbackModal(true);
+        setShowFeedbackModal(false);
+        setFeedbackJob(null);
+        setShowPaymentModal(true);
       } else {
         toast.error(data.error || 'Failed to complete job');
       }
@@ -982,11 +987,7 @@ export default function CustomerDashboard({ user }) {
         setShowFeedbackModal(false);
         setFeedbackJob(null);
         setActiveJob(prev => prev ? { ...prev, isReviewed: true } : prev);
-        if (activeJob?.status === 'completed' && activeJob.payment?.status !== 'paid') {
-          setShowPaymentModal(true);
-        } else {
-          setActiveTab('history');
-        }
+        setActiveTab('history');
       } else {
         toast.error(data.error || 'Failed to submit feedback');
       }
@@ -1774,13 +1775,13 @@ export default function CustomerDashboard({ user }) {
           <div className="spm-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
             <div style={{ padding: 20 }}>
               <h3>Service completed successfully</h3>
-              <p style={{ color: 'var(--text-secondary)' }}>The service was marked complete. You can provide feedback or return to the dashboard.</p>
+              <p style={{ color: 'var(--text-secondary)' }}>The service was marked complete. Please complete the escrow payment first, then you can leave feedback.</p>
               <div style={{ display: 'flex', gap: '10px', marginTop: 16 }}>
                 <button className="btn btn-primary" onClick={() => {
                   setShowCompletionModal(false);
-                  if (completionJob) setFeedbackJob(completionJob);
-                  setShowFeedbackModal(true);
-                }}>Give Feedback</button>
+                  setActiveJob(completionJob);
+                  setShowPaymentModal(true);
+                }}>Pay Now</button>
                 <button className="btn btn-secondary" onClick={() => {
                   setShowCompletionModal(false);
                   setCompletionJob(null);

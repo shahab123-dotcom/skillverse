@@ -5,6 +5,8 @@ const bcrypt = require('bcryptjs');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const { Readable } = require('stream');
+const cloudinary = require('cloudinary').v2;
 const { User, Worker, Job, Message, Complaint, Review } = require('./models');
 const { releaseDuePayments, releaseJobPayment, computePaymentBreakdown, refundJobPayment } = require('./escrow');
 
@@ -14,13 +16,38 @@ async function checkAndReleasePayments() {
 
 const JWT_SECRET = process.env.JWT_SECRET || 'skillsverse_secret_key_12345';
 
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME || 'ddmqx0jwr',
+  api_key: process.env.CLOUDINARY_API_KEY || '268613433374696',
+  api_secret: process.env.CLOUDINARY_API_SECRET || 'f4qjc02T1bLogGNTrHw6dtHinwU'
+});
+
+async function uploadToCloudinary(buffer, mimetype, originalName) {
+  if (!buffer || buffer.length === 0) return null;
+
+  const resourceType = mimetype?.startsWith('image/') || mimetype?.startsWith('video/') ? 'auto' : 'raw';
+
+  return new Promise((resolve, reject) => {
+    const uploadStream = cloudinary.uploader.upload_stream({
+      resource_type: resourceType,
+      folder: 'skillsverse/complaints',
+      public_id: `${Date.now()}-${path.basename(originalName || 'evidence').replace(/\.[^/.]+$/, '')}`
+    }, (error, result) => {
+      if (error) return reject(error);
+      resolve(result);
+    });
+
+    Readable.from(buffer).pipe(uploadStream);
+  });
+}
+
 // Configure Multer for Audio Uploads
 const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
 
-const storage = multer.diskStorage({
+const audioStorage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, uploadDir);
   },
@@ -28,7 +55,9 @@ const storage = multer.diskStorage({
     cb(null, `voice-${Date.now()}${path.extname(file.originalname || '.webm')}`);
   }
 });
-const upload = multer({ storage });
+const complaintStorage = multer.memoryStorage();
+const upload = multer({ storage: audioStorage });
+const complaintUpload = multer({ storage: complaintStorage });
 
 // Middleware to authenticate JWT token
 const authenticateToken = (req, res, next) => {
@@ -1280,7 +1309,7 @@ router.get('/workers/earnings-stats', authenticateToken, async (req, res) => {
 
 // ─── COMPLAINT / DISPUTE ROUTES ───────────────────────────────────────────────
 // Customer submits a complaint
-router.post('/complaints', authenticateToken, upload.single('evidence'), async (req, res) => {
+router.post('/complaints', authenticateToken, complaintUpload.single('evidence'), async (req, res) => {
   try {
     if (req.user.role !== 'customer') return res.status(403).json({ error: 'Customer access required' });
     const { jobId, workerName, category, title, details } = req.body;
@@ -1311,7 +1340,11 @@ router.post('/complaints', authenticateToken, upload.single('evidence'), async (
       return res.status(400).json({ error: 'A complaint for this job has already been submitted.' });
     }
 
-    const evidenceUrl = req.file ? `/uploads/${req.file.filename}` : '';
+    let evidenceUrl = '';
+    if (req.file) {
+      const uploaded = await uploadToCloudinary(req.file.buffer, req.file.mimetype, req.file.originalname);
+      evidenceUrl = uploaded?.secure_url || '';
+    }
 
     const complaint = new Complaint({
       jobId,
