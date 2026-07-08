@@ -71,14 +71,25 @@ module.exports = (io) => {
     socket.on('accept_job', async ({ jobId, workerId }) => {
       try {
         const normalizedWorkerId = String(workerId);
-        const job = await Job.findById(jobId).populate('customer');
+
+        const job = await Job.findOneAndUpdate(
+          { _id: jobId, worker: null, status: 'pending' },
+          { $set: { worker: normalizedWorkerId, status: 'assigned' } },
+          { new: true }
+        ).populate('customer');
+
+        if (!job) {
+          console.log(`[DISPATCH] Job ${jobId} already assigned or unavailable`);
+          socket.emit('job_taken', { jobId, reason: 'Already assigned or unavailable' });
+          return;
+        }
+
         const worker = await Worker.findById(normalizedWorkerId);
-
-        if (!job || !worker) return;
-
-        job.worker = normalizedWorkerId;
-        job.status = 'assigned';
-        await job.save();
+        if (!worker) {
+          console.log(`[DISPATCH] Accept failed because worker ${normalizedWorkerId} was not found`);
+          socket.emit('job_taken', { jobId, reason: 'Worker not found' });
+          return;
+        }
 
         worker.totalRequests += 1;
         worker.isAvailable = false;

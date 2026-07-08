@@ -709,6 +709,15 @@ export default function WorkerDashboard({ user }) {
       setAlertCountdown(30);
     });
 
+    socket.on('job_taken', ({ jobId, reason }) => {
+      const matchesIncoming = incomingJobRef.current && String(incomingJobRef.current.jobId) === String(jobId);
+      if (matchesIncoming) {
+        toast.info('This request was already accepted by another worker.');
+        setIncomingJob(null);
+        setAlertCountdown(0);
+      }
+    });
+
     // Customer cancelled — clear incoming or active job
     socket.on('job_cancelled', ({ jobId }) => {
       const matchesIncoming = incomingJobRef.current && String(incomingJobRef.current.jobId) === String(jobId);

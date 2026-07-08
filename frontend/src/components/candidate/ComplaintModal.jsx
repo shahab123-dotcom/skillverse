@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { API_URL } from '../../App';
 
 export default function ComplaintModal({ job, paidJobs, token, onClose, onSuccess }) {
   const [title, setTitle] = useState('');
@@ -28,7 +29,7 @@ export default function ComplaintModal({ job, paidJobs, token, onClose, onSucces
       formData.append('category', selectedJob?.category || '');
       if (evidence) formData.append('evidence', evidence);
 
-      const res = await fetch('/api/complaints', {
+      const res = await fetch(`${API_URL}/api/complaints`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: formData
