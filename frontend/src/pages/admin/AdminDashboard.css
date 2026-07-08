@@ -1,0 +1,128 @@
+.admin-dashboard-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.admin-dashboard-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.admin-complaints-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.admin-complaints-table th {
+  text-align: left;
+  padding: 10px 12px;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--border-grey);
+}
+
+.admin-complaints-table td {
+  padding: 12px 12px;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-grey);
+  vertical-align: middle;
+}
+
+.admin-complaints-table tr:hover td {
+  background: var(--bg-card-hover);
+}
+
+.admin-resolve-btns {
+  display: flex;
+  gap: 6px;
+}
+
+.btn-approve {
+  padding: 5px 12px;
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid #10b981;
+  border-radius: var(--radius-sm);
+  color: #10b981;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.btn-approve:hover {
+  background: rgba(16, 185, 129, 0.3);
+}
+
+.btn-reject {
+  padding: 5px 12px;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid #ef4444;
+  border-radius: var(--radius-sm);
+  color: #ef4444;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.btn-reject:hover {
+  background: rgba(239, 68, 68, 0.25);
+}
+
+.complaint-status {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.complaint-status--pending {
+  background: rgba(245, 158, 11, 0.12);
+  color: #f59e0b;
+}
+
+.complaint-status--approved {
+  background: rgba(16, 185, 129, 0.12);
+  color: #10b981;
+}
+
+.complaint-status--rejected {
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+}
+
+.hold-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.hold-status--held {
+  background: rgba(245, 158, 11, 0.12);
+  color: #f59e0b;
+}
+
+.hold-status--released {
+  background: rgba(16, 185, 129, 0.12);
+  color: #10b981;
+}
+
+.hold-status--under_review {
+  background: rgba(99, 102, 241, 0.12);
+  color: #818cf8;
+}
+
+.hold-status--refunded {
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+}

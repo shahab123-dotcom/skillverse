@@ -10,6 +10,7 @@ import EmptyState from '../../components/shared/EmptyState';
 import Pagination from '../../components/shared/Pagination';
 import { TableSkeleton } from '../../components/shared/LoadingSkeleton';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import { WORKER_SERVICE_OPTIONS } from '../../constants/workerServices';
 
 export default function WorkerDashboard({ user }) {
   const socketRef = useRef(null);
@@ -1243,10 +1244,15 @@ export default function WorkerDashboard({ user }) {
             <div style={{ marginTop: '20px' }}>
               <span className="form-label">Registered Skills</span>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '8px' }}>
-                {profile.skills.map((s) => (
-                  <StatusBadge key={s} status="info" label={s} />
-                ))}
+                {(Array.isArray(profile?.skills) && profile.skills.length > 0 ? profile.skills : WORKER_SERVICE_OPTIONS)
+                  .filter(Boolean)
+                  .map((s) => (
+                    <StatusBadge key={s} status="info" label={s} />
+                  ))}
               </div>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '13px', marginTop: '8px' }}>
+                These are the service categories available to customers on signup and in your worker dashboard.
+              </p>
             </div>
 
             {isContractorUser && (

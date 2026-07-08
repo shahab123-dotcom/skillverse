@@ -1,3 +1,5 @@
+import './Overview.css';
+
 export default function Overview({ workersCount, jobsCount, paymentsStats }) {
   return (
     <section id="overview" className="card dashboard-section overview-section">

@@ -1,0 +1,44 @@
+.overview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.overview-card {
+  border: 1px solid var(--border-grey);
+  border-radius: var(--radius-md);
+  padding: 18px;
+  background: rgba(255, 255, 255, 0.03);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.overview-card span {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.overview-card strong {
+  font-size: 22px;
+  color: var(--text-primary);
+}
+
+.dashboard-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.section-copy {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+@media (max-width: 640px) {
+  .overview-grid {
+    grid-template-columns: 1fr;
+  }
+}

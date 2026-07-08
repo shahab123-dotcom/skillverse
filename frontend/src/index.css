@@ -849,31 +849,6 @@ button, input, select, textarea {
   color: var(--text-muted);
 }
 
-.candidate-form-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 20px;
-}
-
-.candidate-form-label-inline {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-@media (max-width: 640px) {
-  .candidate-form-grid {
-    grid-template-columns: 1fr;
-    gap: 16px;
-  }
-
-  .candidate-form-label-inline {
-    align-items: flex-start;
-  }
-}
-
 /* Custom Voice Recording Component CSS */
 .voice-recorder-wrapper {
   background: var(--bg-input);
@@ -2688,42 +2663,6 @@ button, input, select, textarea {
   }
 }
 
-/* Toggle Available Switch (Worker) */
-.switch-container {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  cursor: pointer;
-}
-
-.switch-track {
-  width: 48px;
-  height: 24px;
-  background: var(--border-grey);
-  border-radius: 12px;
-  position: relative;
-  transition: var(--transition);
-}
-
-.switch-thumb {
-  width: 18px;
-  height: 18px;
-  background: #fff;
-  border-radius: 50%;
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  transition: var(--transition);
-}
-
-.switch-track.active {
-  background: var(--primary-orange);
-}
-
-.switch-track.active .switch-thumb {
-  left: 27px;
-}
-
 /* ═══════════════════════════════════════════════════════════════
    PAYMENT MODAL
 ═══════════════════════════════════════════════════════════════ */
@@ -3310,13 +3249,6 @@ button, input, select, textarea {
   text-align: left;
 }
 
-.sidebar-panel--worker {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-height: 420px;
-}
-
 .sidebar-footer {
   margin-top: auto;
   padding-top: 20px;
@@ -3358,67 +3290,6 @@ button, input, select, textarea {
   margin: 4px 0 0;
   font-size: 11px;
   color: var(--text-secondary);
-}
-
-.sidebar-availability {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px 14px;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid var(--border-grey);
-}
-
-.sidebar-availability__text {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-
-.sidebar-availability__label {
-  margin: 0;
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-muted);
-}
-
-.sidebar-availability__state {
-  margin: 4px 0 0;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-secondary);
-}
-
-.sidebar-availability__state.is-online {
-  color: var(--success-color);
-}
-
-.sidebar-status-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--text-muted);
-  flex-shrink: 0;
-}
-
-.sidebar-status-dot--online {
-  background: var(--success-color);
-  box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.2);
-}
-
-.sidebar-nav-badge {
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  padding: 3px 7px;
-  border-radius: 999px;
-  background: rgba(16, 185, 129, 0.18);
-  color: var(--success-color);
 }
 
 .dashboard-page-header {
@@ -3540,135 +3411,6 @@ button, input, select, textarea {
 
 .job-tracking-grid--equal {
   grid-template-columns: 1fr 1fr;
-}
-
-.worker-job-chat {
-  border-left: 1px solid var(--border-grey);
-  padding-left: 24px;
-}
-
-@media (max-width: 1024px) {
-  .worker-job-chat {
-    border-left: none;
-    border-top: 1px solid var(--border-grey);
-    padding-left: 0;
-    padding-top: 24px;
-  }
-}
-
-.worker-profile-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 20px;
-}
-
-.worker-dashboard-filter-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 14px;
-  align-items: flex-end;
-}
-
-.worker-dashboard-filter-hint {
-  min-width: 220px;
-  color: var(--text-secondary);
-  font-size: 13px;
-}
-
-.worker-project-card-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 20px;
-}
-
-.worker-project-action-row {
-  display: flex;
-  gap: 10px;
-  margin-top: 16px;
-  flex-wrap: wrap;
-}
-
-.worker-project-action-row > * {
-  flex: 1 1 180px;
-}
-
-.worker-mobile-stack {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-}
-
-.worker-mobile-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-}
-
-.worker-mobile-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.worker-profile-value {
-  margin: 6px 0 0;
-  font-weight: 600;
-  font-size: 15px;
-}
-
-.worker-profile-value--success {
-  color: var(--success-color);
-}
-
-@media (max-width: 600px) {
-  .worker-profile-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .worker-dashboard-filter-row {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .worker-dashboard-filter-hint {
-    min-width: 0;
-  }
-
-  .worker-project-card-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .worker-project-action-row {
-    flex-direction: column;
-  }
-
-  .worker-project-action-row > * {
-    width: 100%;
-    flex-basis: auto;
-  }
-
-  .worker-mobile-stack {
-    grid-template-columns: 1fr;
-  }
-
-  .worker-mobile-header {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .worker-mobile-actions {
-    flex-direction: column;
-    width: 100%;
-  }
-
-  .worker-mobile-actions > * {
-    width: 100%;
-  }
-}
-
-.availability-card {
-  margin-top: 0;
 }
 
 .data-table-wrap {

@@ -2,11 +2,9 @@ import React, { useState } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { User, HardHat, Mail, Lock, Phone, Wrench, MapPin, CreditCard, ArrowLeft } from 'lucide-react';
 import { API_URL } from '../../App';
+import { WORKER_SERVICE_OPTIONS } from '../../constants/workerServices';
 
-const SKILLS_LIST = [
-  'Plumbing', 'Electrical', 'Cleaning', 'Appliance Repair', 'Pest Control',
-  'Structural', 'Paint', 'Masonry', 'Woodwork', 'Roofing', 'Contractor',
-];
+const SKILLS_LIST = WORKER_SERVICE_OPTIONS;
 
 const ROLE_OPTIONS = [
   {

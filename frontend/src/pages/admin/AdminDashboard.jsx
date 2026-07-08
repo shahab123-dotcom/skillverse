@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import io from 'socket.io-client';
+import './AdminDashboard.css';
 import { Users, Hammer, CreditCard, Check, X, Trash2, ShieldAlert, UserCircle, ListChecks, Ban, ShieldCheck } from 'lucide-react';
 import { API_URL } from '../../App';
 import { useToast } from '../../context/ToastContext';
@@ -433,10 +434,19 @@ export default function AdminDashboard({ user }) {
   const getTotalPages = (items) => Math.max(1, Math.ceil(items.length / itemsPerPage));
   const isContractorRole = (worker) => Array.isArray(worker.skills) && worker.skills.includes('Contractor');
 
+  const workerRoleOptions = Array.from(
+    new Set(
+      workers.flatMap((worker) => (Array.isArray(worker.skills) ? worker.skills.filter(Boolean) : []))
+    )
+  ).filter(Boolean).sort((a, b) => a.localeCompare(b));
+
   const filteredWorkers = workers.filter((worker) => {
-    if (workerRoleFilter === 'contractor') return isContractorRole(worker);
+    if (workerRoleFilter === 'all') return true;
     if (workerRoleFilter === 'worker') return !isContractorRole(worker);
-    return true;
+    if (workerRoleFilter === 'contractor') return isContractorRole(worker);
+
+    const workerSkills = Array.isArray(worker.skills) ? worker.skills.filter(Boolean) : [];
+    return workerSkills.includes(workerRoleFilter);
   }).sort((a, b) => {
     if (workerSort === 'highest_rated') {
       return (b.averageRating || 0) - (a.averageRating || 0);
@@ -574,6 +584,9 @@ export default function AdminDashboard({ user }) {
                     <option value="all">All Roles</option>
                     <option value="worker">Daily Workers</option>
                     <option value="contractor">Contractors</option>
+                    {workerRoleOptions.map((role) => (
+                      <option key={role} value={role}>{role}</option>
+                    ))}
                   </select>
                 </div>
                 <div>
