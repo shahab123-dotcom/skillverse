@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useNavigate, Navigate, useLocation } from 'react-router-dom';
-import { LogOut, Wrench, Shield, User, HardHat, Compass, Menu, X, Building2 } from 'lucide-react';
+import { LogOut, Wrench, User, HardHat, Compass, Menu, X, Building2 } from 'lucide-react';
 import { ToastProvider } from './context/ToastContext';
 import { ConfirmProvider } from './context/ConfirmContext';
 import Home from './pages/public/Home';
@@ -63,11 +63,6 @@ function Navigation({ user, logout }) {
                 {user.isContractor ? 'Contractor Workspace' : 'Worker Workspace'}
               </Link>
             )}
-            {user.role === 'admin' && (
-              <Link to="/admin" className={`nav-link flex items-center gap-1 ${isActive('/admin') ? 'nav-link--active' : ''}`} onClick={() => setMobileMenuOpen(false)}>
-                <Shield size={16} /> Admin panel
-              </Link>
-            )}
             <div className="nav-link flex items-center gap-1" style={{ color: '#fff', fontWeight: 600 }}>
               <User size={16} style={{ color: 'var(--primary-orange)' }} /> {user.name}
               {user.isContractor && (
@@ -80,9 +75,6 @@ function Navigation({ user, logout }) {
           </>
         ) : (
           <>
-            <Link to="/admin/login" className={`nav-link nav-link--admin flex items-center gap-1 ${isActive('/admin/login') ? 'nav-link--active' : ''}`} onClick={() => setMobileMenuOpen(false)}>
-              <Shield size={16} /> Admin
-            </Link>
             <Link to="/auth" className="btn btn-primary nav-cta" style={{ padding: '8px 16px' }} onClick={() => setMobileMenuOpen(false)}>
               Get Started
             </Link>
