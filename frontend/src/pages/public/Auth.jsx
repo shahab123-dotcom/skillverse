@@ -45,6 +45,19 @@ export default function Auth({ login }) {
   const [phone, setPhone] = useState('');
   const [selectedSkills, setSelectedSkills] = useState([]);
 
+  // Validation state
+  const [nameError, setNameError] = useState('');
+  const [emailError, setEmailError] = useState('');
+  const [phoneError, setPhoneError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+
+  // Regex patterns
+  const EMAIL_RE = /^[\w.+-]+@[\w-]+\.[\w.]+$/i;
+  // Pakistan mobile example: allow +92 or 0 prefix and 10-11 digits starting with 3
+  const PHONE_RE = /^(?:\+92|0)?3\d{9}$/;
+  // Password: min 8 chars, at least one letter and one number
+  const PASSWORD_RE = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d@#$%^&+=!]{8,}$/;
+
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
@@ -79,6 +92,41 @@ export default function Auth({ login }) {
     setSuccess('');
     setLoading(true);
 
+    // Clear field errors
+    setNameError(''); setEmailError(''); setPhoneError(''); setPasswordError('');
+
+    // Client-side validation
+    if (!isLogin) {
+      if (!name.trim()) {
+        setNameError('Please enter your full name');
+      }
+      if (!EMAIL_RE.test(email)) {
+        setEmailError('Enter a valid email address');
+      }
+      if (!PHONE_RE.test(phone)) {
+        setPhoneError('Enter a valid mobile number (e.g. 03001234567)');
+      }
+      if (!PASSWORD_RE.test(password)) {
+        setPasswordError('Password must be at least 8 characters and include letters and numbers');
+      }
+
+      if (nameError || emailError || phoneError || passwordError || !name.trim() || !EMAIL_RE.test(email) || !PHONE_RE.test(phone) || !PASSWORD_RE.test(password)) {
+        setLoading(false);
+        return;
+      }
+    } else {
+      // Login validations
+      if (!EMAIL_RE.test(email)) {
+        setEmailError('Enter a valid email address');
+        setLoading(false);
+        return;
+      }
+      if (!password) {
+        setPasswordError('Enter your password');
+        setLoading(false);
+        return;
+      }
+    }
     const endpoint = isLogin ? '/api/auth/login' : '/api/auth/register';
     const payload = isLogin
       ? { email, password, role }
@@ -252,6 +300,7 @@ export default function Auth({ login }) {
                     required
                   />
                 </div>
+                {nameError && <div className="auth-field-error">{nameError}</div>}
               </div>
             )}
 
@@ -270,6 +319,7 @@ export default function Auth({ login }) {
                   required
                 />
               </div>
+              {emailError && <div className="auth-field-error">{emailError}</div>}
             </div>
 
             {!isLogin && (
@@ -288,6 +338,7 @@ export default function Auth({ login }) {
                     required
                   />
                 </div>
+                {phoneError && <div className="auth-field-error">{phoneError}</div>}
               </div>
             )}
 
@@ -306,6 +357,7 @@ export default function Auth({ login }) {
                   required
                 />
               </div>
+              {passwordError && <div className="auth-field-error">{passwordError}</div>}
             </div>
 
             {!isLogin && role === 'worker' && (

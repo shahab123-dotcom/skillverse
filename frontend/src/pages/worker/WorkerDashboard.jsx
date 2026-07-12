@@ -1447,7 +1447,7 @@ export default function WorkerDashboard({ user }) {
                     </div>
                   ) : (
                     messages.map((msg, i) => (
-                      <div key={i} className={`chat-bubble ${msg.sender}`} style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: '180px' }}>
+                      <div key={i} className={`chat-bubble ${msg.sender === 'worker' ? 'sender' : 'receiver'}`} style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: '180px' }}>
                         {msg.text && <div>{msg.text}</div>}
                         {msg.voiceUrl && (
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

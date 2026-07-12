@@ -1373,7 +1373,164 @@ export default function CustomerDashboard({ user }) {
                 </div>
               )}
 
-                {/* Cancel/Complete/Reject options */}
+                {/* ── Chat Box ── */}
+              <div ref={chatRef} style={{ marginTop: '20px', border: '1px solid var(--border-grey)', borderRadius: '14px', overflow: 'hidden' }}>
+                {/* Chat header */}
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: '10px',
+                  padding: '12px 16px',
+                  background: 'linear-gradient(135deg, rgba(255,107,0,0.12), rgba(255,107,0,0.04))',
+                  borderBottom: '1px solid var(--border-grey)'
+                }}>
+                  <MessageSquare size={16} style={{ color: 'var(--primary-orange)' }} />
+                  <span style={{ fontWeight: '700', fontSize: '14px', color: '#fff' }}>
+                    Chat with {workerDetails?.name || 'Worker'}
+                  </span>
+                  <span style={{
+                    marginLeft: 'auto', fontSize: '10px', fontWeight: '700',
+                    background: dispatchStatus === 'accepted' ? 'rgba(16,185,129,0.15)' : 'rgba(255,255,255,0.08)',
+                    border: `1px solid ${dispatchStatus === 'accepted' ? 'rgba(16,185,129,0.4)' : 'var(--border-grey)'}`,
+                    color: dispatchStatus === 'accepted' ? '#10b981' : 'var(--text-secondary)',
+                    padding: '2px 8px', borderRadius: '20px', letterSpacing: '0.04em'
+                  }}>
+                    {dispatchStatus === 'accepted' ? '● LIVE' : '○ WAITING'}
+                  </span>
+                </div>
+
+                {/* Message list */}
+                <div style={{
+                  height: '260px', overflowY: 'auto', padding: '14px 16px',
+                  display: 'flex', flexDirection: 'column', gap: '10px',
+                  background: 'var(--bg-input)'
+                }}>
+                  {messages.length === 0 ? (
+                    <div style={{
+                      flex: 1, display: 'flex', flexDirection: 'column',
+                      alignItems: 'center', justifyContent: 'center',
+                      color: 'var(--text-secondary)', fontSize: '13px', gap: '8px'
+                    }}>
+                      <MessageSquare size={28} style={{ opacity: 0.3 }} />
+                      <span>No messages yet. Say hello! 👋</span>
+                    </div>
+                  ) : (
+                    messages.map((msg, i) => {
+                      const isMe = msg.sender === 'customer';
+                      return (
+                        <div key={i} style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: isMe ? 'flex-end' : 'flex-start'
+                        }}>
+                          <div style={{
+                            maxWidth: '78%',
+                            background: isMe
+                              ? 'linear-gradient(135deg, rgba(255,107,0,0.3), rgba(255,107,0,0.15))'
+                              : 'rgba(255,255,255,0.06)',
+                            border: isMe ? '1px solid rgba(255,107,0,0.35)' : '1px solid var(--border-grey)',
+                            borderRadius: isMe ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
+                            padding: '9px 13px',
+                            color: '#fff',
+                            fontSize: '13px',
+                            lineHeight: 1.5
+                          }}>
+                            {msg.voiceUrl ? (
+                              <audio
+                                src={msg.voiceUrl.startsWith('http') ? msg.voiceUrl : `${API_URL}${msg.voiceUrl}`}
+                                controls
+                                style={{ width: '180px', height: '32px' }}
+                              />
+                            ) : (
+                              msg.text
+                            )}
+                          </div>
+                          <span style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '3px', paddingLeft: '4px', paddingRight: '4px' }}>
+                            {isMe ? 'You' : (workerDetails?.name || 'Worker')}
+                            {msg.createdAt && ` · ${new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}
+                          </span>
+                        </div>
+                      );
+                    })
+                  )}
+                  <div ref={chatEndRef} />
+                </div>
+
+                {/* Chat input */}
+                <form
+                  onSubmit={sendMessage}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '8px',
+                    padding: '10px 12px',
+                    borderTop: '1px solid var(--border-grey)',
+                    background: 'var(--bg-card)'
+                  }}
+                >
+                  {/* Voice record button */}
+                  <button
+                    type="button"
+                    onClick={isChatRecording ? () => stopChatRecording(true) : startChatRecording}
+                    title={isChatRecording ? 'Stop & send voice' : 'Record voice message'}
+                    style={{
+                      flexShrink: 0,
+                      width: '36px', height: '36px',
+                      borderRadius: '50%',
+                      border: isChatRecording ? '2px solid var(--error-color)' : '1px solid var(--border-grey)',
+                      background: isChatRecording ? 'rgba(239,68,68,0.15)' : 'var(--bg-input)',
+                      color: isChatRecording ? '#ef4444' : 'var(--text-secondary)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      animation: isChatRecording ? 'pulseMic 1s infinite' : 'none'
+                    }}
+                  >
+                    {isChatRecording ? <MicOff size={15} /> : <Mic size={15} />}
+                  </button>
+
+                  {isChatRecording && (
+                    <span style={{ fontSize: '11px', color: '#ef4444', fontWeight: '700', flexShrink: 0 }}>
+                      {chatRecordingDuration}s
+                    </span>
+                  )}
+
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder={dispatchStatus === 'accepted' ? 'Type a message...' : 'Waiting for worker...'}
+                    value={newMessage}
+                    onChange={(e) => setNewMessage(e.target.value)}
+                    disabled={dispatchStatus !== 'accepted' || isChatRecording}
+                    style={{
+                      flex: 1,
+                      height: '36px',
+                      fontSize: '13px',
+                      padding: '0 12px',
+                      borderRadius: '18px',
+                      opacity: dispatchStatus !== 'accepted' ? 0.5 : 1
+                    }}
+                  />
+
+                  <button
+                    type="submit"
+                    disabled={!newMessage.trim() || dispatchStatus !== 'accepted'}
+                    style={{
+                      flexShrink: 0,
+                      width: '36px', height: '36px',
+                      borderRadius: '50%',
+                      border: 'none',
+                      background: newMessage.trim() && dispatchStatus === 'accepted'
+                        ? 'var(--primary-orange)'
+                        : 'var(--bg-input)',
+                      color: newMessage.trim() && dispatchStatus === 'accepted' ? '#fff' : 'var(--text-muted)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      cursor: newMessage.trim() && dispatchStatus === 'accepted' ? 'pointer' : 'not-allowed',
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    <Send size={15} />
+                  </button>
+                </form>
+              </div>
+
+              {/* Cancel/Complete/Reject options */}
                 <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}>
                   <button className="btn btn-secondary" onClick={handleCancelJob}>
                     Cancel Booking / Return

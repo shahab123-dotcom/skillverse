@@ -992,14 +992,16 @@ button, input, select, textarea {
   line-height: 1.4;
 }
 
-.chat-bubble.customer {
+.chat-bubble.customer,
+.chat-bubble.sender {
   align-self: flex-end;
   background: var(--primary-orange);
   color: #fff;
   border-bottom-right-radius: 2px;
 }
 
-.chat-bubble.worker {
+.chat-bubble.worker,
+.chat-bubble.receiver {
   align-self: flex-start;
   background: var(--border-grey);
   color: var(--text-primary);
