@@ -156,9 +156,17 @@ export default function Auth({ login }) {
       if (isLogin) {
         login(data.token, data.user);
         if (data.user.role === 'customer') {
-          navigate(location.state?.redirectTo || '/customer');
+          const redirectTab = location.state?.activeTab ?? location.state?.redirectTo;
+          const customerState = redirectTab === 'daily' || redirectTab === 'construction'
+            ? { activeTab: redirectTab }
+            : undefined;
+
+          navigate('/customer', {
+            state: customerState,
+            replace: true,
+          });
         } else if (data.user.role === 'worker') {
-          navigate('/worker');
+          navigate('/worker', { replace: true });
         }
       } else {
         setSuccess(data.message || 'Registration successful! Please sign in.');

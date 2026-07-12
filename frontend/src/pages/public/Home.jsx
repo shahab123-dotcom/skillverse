@@ -148,7 +148,7 @@ export default function Home({ user }) {
 
   const handleService = (target) => {
     if (!user) {
-      navigate('/auth', { state: { redirectTo: target } });
+      navigate('/auth', { state: { activeTab: target } });
     } else {
       navigate('/customer', { state: { activeTab: target } });
     }
