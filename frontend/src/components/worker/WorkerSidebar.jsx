@@ -1,4 +1,5 @@
 import { HardHat, LayoutDashboard, Briefcase, Clock, User, Hammer } from 'lucide-react';
+import './WorkerSidebar.css';
 
 export default function WorkerSidebar({
   activeTab,
