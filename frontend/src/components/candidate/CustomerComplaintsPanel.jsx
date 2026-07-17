@@ -1,3 +1,4 @@
+import './CustomerComplaintsPanel.css';
 import React, { useEffect, useState } from 'react';
 import { ShieldAlert } from 'lucide-react';
 import ComplaintModal from './ComplaintModal';

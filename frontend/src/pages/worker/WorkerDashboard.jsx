@@ -1,3 +1,5 @@
+import './WorkerDashboard.css';
+import './worker.css';
 import React, { useState, useEffect, useRef } from 'react';
 import io from 'socket.io-client';
 import { MapPin, Phone, CheckCircle, Navigation, Send, AlertTriangle, MessageSquare, Mic, ListChecks, CreditCard, Briefcase, User, Map, Check, X, Hammer, X as XIcon, Building2 } from 'lucide-react';
@@ -11,6 +13,11 @@ import Pagination from '../../components/shared/Pagination';
 import { TableSkeleton } from '../../components/shared/LoadingSkeleton';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import { WORKER_SERVICE_OPTIONS } from '../../constants/workerServices';
+import WorkerOverview from './WorkerOverview';
+import ActiveJob from './ActiveJob';
+import ConstructionProjects from './ConstructionProjects';
+import ContractorOffers from './ContractorOffers';
+import WorkerHistory from './WorkerHistory';
 
 export default function WorkerDashboard({ user }) {
   const socketRef = useRef(null);
@@ -1051,7 +1058,7 @@ export default function WorkerDashboard({ user }) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '60px 20px', minHeight: 'calc(100vh - 72px)' }}>
         <div className="card" style={{ maxWidth: '560px', textAlign: 'center', padding: '40px' }}>
-          <div style={{ width: '40px', height: '40px', border: '3px solid var(--primary-orange)', borderRadius: '50%', borderTop: '3px solid transparent', animation: 'spin 1s linear infinite', margin: '0 auto 20px' }} />
+          <div className="loading-spinner" style={{ width: '40px', height: '40px', border: '3px solid var(--primary-orange)', borderRadius: '50%', borderTop: '3px solid transparent', margin: '0 auto 20px' }} />
           <h2 style={{ fontSize: '24px', marginBottom: '12px' }}>Loading your profile...</h2>
           <p style={{ color: 'var(--text-secondary)' }}>Please wait while we retrieve your profile information.</p>
         </div>
@@ -1106,7 +1113,7 @@ export default function WorkerDashboard({ user }) {
             backdropFilter: 'blur(8px)'
           }}
         >
-          <div className="card" style={{ width: '100%', maxWidth: '480px', border: '2px solid var(--primary-orange)', animation: 'pulseMic 2s infinite', margin: '20px auto', maxHeight: 'calc(100% - 80px)', overflowY: 'auto' }}>
+          <div className="card alert-pulse" style={{ width: '100%', maxWidth: '480px', border: '2px solid var(--primary-orange)', margin: '20px auto', maxHeight: 'calc(100% - 80px)', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
               <h3 style={{ color: 'var(--primary-orange)', fontSize: '20px' }}>Incoming Daily Service Request!</h3>
               <span style={{ fontSize: '14px', fontWeight: 'bold', color: 'var(--primary-orange)' }}>{alertCountdown}s</span>
@@ -1179,494 +1186,57 @@ export default function WorkerDashboard({ user }) {
       )}
 
       {activeTab === 'overview' && (
-        <>
-          <div className="stat-grid stat-grid--3">
-            {serviceSummary.map((item) => (
-              <div key={item.label} className="stat-card">
-                <span className="stat-card__label">{item.label}</span>
-                <h3 className="stat-card__value stat-card__value--accent">{item.value}</h3>
-              </div>
-            ))}
-          </div>
-
-          <div className="card card--padded">
-            <div className="section-header">
-              <User size={20} color="var(--primary-orange)" />
-              <div className="section-header__text">
-                <h3>Worker Profile</h3>
-                <p>Your registered details and skill categories.</p>
-              </div>
-            </div>
-            <div className="worker-profile-grid">
-              <div>
-                <span className="form-label">Full Name</span>
-                <p className="worker-profile-value">{profile.name}</p>
-              </div>
-              <div>
-                <span className="form-label">Email</span>
-                <p className="worker-profile-value">{profile.email}</p>
-              </div>
-              <div>
-                <span className="form-label">Total Jobs</span>
-                <p className="worker-profile-value">{profile.totalRequests}</p>
-              </div>
-              <div>
-                <span className="form-label">Completed</span>
-                <p className="worker-profile-value worker-profile-value--success">{profile.completedRequests}</p>
-              </div>
-            </div>
-
-            {profile.averageRating !== undefined && profile.totalReviews !== undefined && (
-              <div style={{ marginTop: '24px', padding: '16px', borderRadius: '12px', background: 'var(--bg-dashboard)', border: '1px solid rgba(251, 191, 36, 0.3)' }}>
-                <h4 style={{ fontSize: '15px', color: '#fbbf24', marginBottom: '12px' }}>Worker Rating & Feedback</h4>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-                  <div style={{ fontSize: '32px', fontWeight: 'bold', color: '#fff', lineHeight: '1' }}>{profile.averageRating.toFixed(1)}</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <div style={{ display: 'flex', color: '#fbbf24', fontSize: '18px' }}>
-                      {[1, 2, 3, 4, 5].map((star) => (
-                        <span key={star}>{star <= Math.round(profile.averageRating) ? '★' : '☆'}</span>
-                      ))}
-                    </div>
-                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Based on {profile.totalReviews} reviews</span>
-                  </div>
-                </div>
-                {recentReviews.length > 0 && (
-                  <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    <span style={{ fontSize: '12px', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Recent Feedback</span>
-                    {recentReviews.slice(0, 3).map(review => (
-                      <div key={review._id} style={{ background: 'rgba(255,255,255,0.03)', padding: '12px', borderRadius: '8px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                          <span style={{ fontSize: '13px', fontWeight: '600', color: '#fff' }}>{review.customer?.name || 'Customer'}</span>
-                          <span style={{ color: '#fbbf24', fontSize: '12px' }}>{'★'.repeat(review.rating)}{'☆'.repeat(5 - review.rating)}</span>
-                        </div>
-                        {review.feedback && <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>"{review.feedback}"</p>}
-                        <span style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'block', marginTop: '6px' }}>
-                          {new Date(review.createdAt).toLocaleDateString()}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div style={{ marginTop: '20px' }}>
-              <span className="form-label">Registered Skills</span>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '8px' }}>
-                {(Array.isArray(profile?.skills) && profile.skills.length > 0 ? profile.skills : WORKER_SERVICE_OPTIONS)
-                  .filter(Boolean)
-                  .map((s) => (
-                    <StatusBadge key={s} status="info" label={s} />
-                  ))}
-              </div>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '13px', marginTop: '8px' }}>
-                These are the service categories available to customers on signup and in your worker dashboard.
-              </p>
-            </div>
-
-            {isContractorUser && (
-              <div style={{ marginTop: '20px' }}>
-                <span className="form-label">Contractor Profile</span>
-                <div className="worker-profile-grid" style={{ marginTop: '10px' }}>
-                  <div>
-                    <span className="form-label">Company</span>
-                    <p className="worker-profile-value">{profile.contractorProfile?.companyName || 'Not provided'}</p>
-                  </div>
-                  <div>
-                    <span className="form-label">Specialization</span>
-                    <p className="worker-profile-value">{profile.contractorProfile?.specialization || 'Not provided'}</p>
-                  </div>
-                  <div>
-                    <span className="form-label">Service Area</span>
-                    <p className="worker-profile-value">{profile.contractorProfile?.serviceArea || 'Not provided'}</p>
-                  </div>
-                  <div>
-                    <span className="form-label">Status</span>
-                    <p className="worker-profile-value">{profile.contractorProfile?.status === 'approved' ? 'Approved' : profile.contractorProfile?.status === 'pending' ? 'Pending review' : profile.contractorProfile?.status === 'rejected' ? 'Rejected' : 'Not submitted'}</p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {!isContractorUser && (
-              <div style={{ marginTop: '30px', padding: '20px', background: 'var(--bg-card)', border: '1px solid var(--border-grey)', borderRadius: '12px' }}>
-                <h4 style={{ color: 'var(--primary-orange)', marginBottom: '16px' }}>Become a Contractor</h4>
-                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '20px' }}>
-                  Register as a contractor to access large-scale construction projects and submit competitive bids.
-                </p>
-                {contractorError && <div style={{ color: 'var(--error-color)', fontSize: '13px', marginBottom: '16px' }}>{contractorError}</div>}
-                {contractorSuccess && <div style={{ color: 'var(--success-color)', fontSize: '13px', marginBottom: '16px' }}>{contractorSuccess}</div>}
-                <form onSubmit={handleContractorSubmit} style={{ display: 'grid', gap: '16px' }}>
-                  <div className="worker-mobile-stack">
-                    <div className="form-group">
-                      <label className="form-label">Company Name</label>
-                      <input type="text" className="form-input" value={contractorForm.companyName} onChange={e => setContractorForm({ ...contractorForm, companyName: e.target.value })} required />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Experience (Years)</label>
-                      <input type="number" className="form-input" value={contractorForm.experienceYears} onChange={e => setContractorForm({ ...contractorForm, experienceYears: e.target.value })} required />
-                    </div>
-                  </div>
-                  <div className="worker-mobile-stack">
-                    <div className="form-group">
-                      <label className="form-label">Specialization</label>
-                      <input type="text" className="form-input" placeholder="e.g. Structural, Plumbing" value={contractorForm.specialization} onChange={e => setContractorForm({ ...contractorForm, specialization: e.target.value })} required />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">City</label>
-                      <select className="form-input" value={contractorForm.city} onChange={e => setContractorForm({ ...contractorForm, city: e.target.value })} required>
-                        <option value="">Select City</option>
-                        {['Lahore', 'Karachi', 'Islamabad', 'Rahim Yar Khan', 'Multan', 'Faisalabad', 'Rawalpindi', 'Bahawalpur'].map(c => <option key={c} value={c}>{c}</option>)}
-                      </select>
-                    </div>
-                  </div>
-                  <div className="worker-mobile-stack">
-                    <div className="form-group">
-                      <label className="form-label">Residence Area</label>
-                      <input type="text" className="form-input" placeholder="e.g. Clifton Block 5" value={contractorForm.residenceArea} onChange={e => setContractorForm({ ...contractorForm, residenceArea: e.target.value })} required />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Exact Location / Address</label>
-                      <input type="text" className="form-input" placeholder="Detailed address" value={contractorForm.exactLocation} onChange={e => setContractorForm({ ...contractorForm, exactLocation: e.target.value })} required />
-                    </div>
-                  </div>
-                  <button type="submit" className="btn btn-primary" disabled={contractorLoading} style={{ justifySelf: 'start', padding: '10px 20px' }}>
-                    {contractorLoading ? 'Submitting...' : 'Submit Contractor Profile'}
-                  </button>
-                </form>
-              </div>
-            )}
-          </div>
-        </>
+        <WorkerOverview
+          profile={profile}
+          earningsSummary={earningsSummary}
+          recentReviews={recentReviews}
+          isContractorUser={isContractorUser}
+          contractorForm={contractorForm}
+          contractorError={contractorError}
+          contractorSuccess={contractorSuccess}
+          contractorLoading={contractorLoading}
+          handleContractorSubmit={handleContractorSubmit}
+          profileRef={profileRef}
+          availabilityRef={availabilityRef}
+        />
       )}
 
       {activeTab === 'active-job' && (
-        <>
-          {activeJob ? (
-            <>
-              <div className="card card--padded">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                <div>
-                  <h3 style={{ fontSize: '20px' }}>Active Job</h3>
-                  <p style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>Category: <strong>{activeJob.category}</strong></p>
-                </div>
-                <StatusBadge status={jobStatus === 'assigned' ? 'assigned' : jobStatus === 'en_route' ? 'en_route' : 'completed'} label={jobStatus} />
-              </div>
-
-              {/* Location Cards */}
-              <div className="worker-mobile-stack" style={{ marginBottom: '20px' }}>
-                {/* Worker Location */}
-                <div style={{ background: 'var(--bg-input)', padding: '20px', borderRadius: '14px', border: '1px solid var(--border-grey)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-                    <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'rgba(255,107,0,0.15)', border: '1px solid rgba(255,107,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px' }}>👷</div>
-                    <span style={{ fontWeight: '700', color: '#fff', fontSize: '14px' }}>Your Location</span>
-                  </div>
-                  <p style={{ fontSize: '11px', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
-                    GPS: {gpsLocation.latitude.toFixed(5)}, {gpsLocation.longitude.toFixed(5)}
-                  </p>
-                </div>
-
-                {/* Customer Location */}
-                <div style={{ background: 'var(--bg-input)', padding: '20px', borderRadius: '14px', border: '1px solid var(--border-grey)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-                    <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px' }}>🏠</div>
-                    <span style={{ fontWeight: '700', color: '#fff', fontSize: '14px' }}>Customer Location</span>
-                  </div>
-                  <p style={{ fontSize: '13px', color: '#fff', fontWeight: '600', marginBottom: '6px' }}>
-                    {getAddressText(activeJob.location)}
-                  </p>
-                  <p style={{ fontSize: '11px', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
-                    GPS: {activeJob.location.latitude.toFixed(5)}, {activeJob.location.longitude.toFixed(5)}
-                  </p>
-                </div>
-              </div>
-
-              {/* Simple Map */}
-              <div style={{ height: '300px', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--border-grey)' }}>
-                <MapContainer
-                  center={[gpsLocation.latitude, gpsLocation.longitude]}
-                  zoom={13}
-                  style={{ height: '100%', width: '100%' }}
-                >
-                  <TileLayer
-                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                    attribution='&copy; OpenStreetMap contributors'
-                  />
-                  <Marker position={[gpsLocation.latitude, gpsLocation.longitude]}>
-                    <Popup>Your Location</Popup>
-                  </Marker>
-                  <Marker position={[activeJob.location.latitude, activeJob.location.longitude]}>
-                    <Popup>Customer Location</Popup>
-                  </Marker>
-                </MapContainer>
-              </div>
-
-              {/* Action Buttons */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '20px' }}>
-                {jobStatus === 'assigned' && (
-                  <>
-                    <button
-                      onClick={() => handleUpdateStatus('en_route')}
-                      className="btn btn-primary"
-                      style={{ width: '100%', padding: '12px' }}
-                    >
-                      Arrived at customer
-                    </button>
-                    <button
-                      onClick={handleRejectJob}
-                      className="btn btn-secondary"
-                      style={{ width: '100%', padding: '12px', borderColor: 'var(--error-color)', color: 'var(--error-color)' }}
-                    >
-                      <XIcon size={16} style={{ marginRight: '6px' }} />
-                      Reject Job
-                    </button>
-                  </>
-                )}
-
-                {jobStatus === 'en_route' && (
-                  <div style={{ textAlign: 'center', padding: '12px', background: 'rgba(34,197,94,0.07)', borderRadius: '10px', border: '1px solid rgba(34,197,94,0.2)' }}>
-                    <p style={{ fontSize: '13px', color: '#86efac', marginBottom: '4px' }}>✅ You have arrived at the customer location.</p>
-                    <p style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Work in progress — the customer will confirm completion and make the payment.</p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Chat Section */}
-            <div className="card card--padded" style={{ marginTop: '20px' }}>
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '12px' }}>
-                <MessageSquare size={16} color="var(--primary-orange)" />
-                <h4 style={{ fontSize: '14px' }}>Chat with Customer</h4>
-              </div>
-
-              <div className="chat-window" style={{ height: '340px' }}>
-                <div className="chat-messages">
-                  {messages.length === 0 ? (
-                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', fontStyle: 'italic', textAlign: 'center', marginTop: '40px' }}>
-                      Start typing to speak with customer.
-                    </div>
-                  ) : (
-                    messages.map((msg, i) => (
-                      <div key={i} className={`chat-bubble ${msg.sender === 'worker' ? 'sender' : 'receiver'}`} style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: '180px' }}>
-                        {msg.text && <div>{msg.text}</div>}
-                        {msg.voiceUrl && (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <audio
-                              src={msg.voiceUrl.startsWith('http') ? msg.voiceUrl : `${API_URL}${msg.voiceUrl}`}
-                              controls
-                              style={{ width: '100%', height: '32px', minWidth: '150px' }}
-                            />
-                            {msg.voiceDuration > 0 && (
-                              <span style={{ fontSize: '10px', color: '#fff', opacity: 0.8 }}>
-                                {Math.floor(msg.voiceDuration / 60)}:{(msg.voiceDuration % 60).toString().padStart(2, '0')}
-                              </span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    ))
-                  )}
-                  <div ref={chatEndRef} />
-                </div>
-
-                <form onSubmit={sendMessage} className="chat-input-area" style={{ display: 'flex', alignItems: 'center', padding: '4px 8px', background: 'var(--bg-input)' }}>
-                  {isChatRecording ? (
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '6px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <span
-                          style={{
-                            width: '10px',
-                            height: '10px',
-                            borderRadius: '50%',
-                            background: 'var(--error-color)',
-                            animation: 'pulseMic 1s infinite'
-                          }}
-                        />
-                        <span style={{ fontSize: '13px', color: 'var(--text-primary)' }}>
-                          Recording ({chatRecordingDuration}s)...
-                        </span>
-                      </div>
-                      <div style={{ display: 'flex', gap: '6px' }}>
-                        <button
-                          type="button"
-                          className="btn btn-secondary"
-                          onClick={() => stopChatRecording(false)}
-                          style={{ padding: '4px 8px', fontSize: '12px', borderColor: 'var(--error-color)', color: 'var(--error-color)' }}
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn-primary"
-                          onClick={() => stopChatRecording(true)}
-                          style={{ padding: '4px 8px', fontSize: '12px' }}
-                        >
-                          Send
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      <input
-                        type="text"
-                        placeholder="Type message..."
-                        value={newMessage}
-                        onChange={(e) => setNewMessage(e.target.value)}
-                        className="chat-input"
-                        style={{ flex: 1, border: 'none', background: 'transparent', color: '#fff', padding: '12px' }}
-                      />
-                      <button
-                        type="button"
-                        onClick={startChatRecording}
-                        style={{ background: 'none', border: 'none', padding: '0 8px', color: 'var(--text-secondary)', cursor: 'pointer' }}
-                        title="Record Voice Message"
-                      >
-                        <Mic size={18} />
-                      </button>
-                      <button type="submit" style={{ background: 'none', border: 'none', padding: '0 16px', color: 'var(--primary-orange)', cursor: 'pointer' }}>
-                        <Send size={16} />
-                      </button>
-                    </>
-                  )}
-                </form>
-              </div>
-            </div>
-            </>
-          ) : (
-            <EmptyState
-              icon={Briefcase}
-              title="No active service requests"
-              description="Turn availability ON in the sidebar to start receiving real-time matching jobs."
-              action={
-                !isAvailable ? (
-                  <button type="button" className="btn btn-primary" onClick={handleToggleAvailability}>
-                    Go Online
-                  </button>
-                ) : null
-              }
-            />
-          )}
-        </>
+        <ActiveJob
+          activeJob={activeJob}
+          jobStatus={jobStatus}
+          setJobStatus={setJobStatus}
+          gpsLocation={gpsLocation}
+          messages={messages}
+          setMessages={setMessages}
+          newMessage={newMessage}
+          setNewMessage={setNewMessage}
+          socketRef={socketRef}
+          clearJobState={clearJobState}
+          handleRejectJob={handleRejectJob}
+          handleCompleteJob={handleUpdateStatus}
+          getAddressText={getAddressText}
+          isAvailable={isAvailable}
+          handleToggleAvailability={handleToggleAvailability}
+        />
       )}
 
       {activeTab === 'contractor-offers' && (
-        <div className="card card--padded">
-          <div className="section-header">
-            <Briefcase size={20} color="var(--primary-orange)" />
-            <div className="section-header__text">
-              <h3>Contractor Offers</h3>
-              <p>Contractor opportunities and profile review updates appear here.</p>
-            </div>
-          </div>
-          <div className="worker-profile-grid">
-            <div>
-              <span className="form-label">Current contractor status</span>
-              <p className="worker-profile-value">{profile.contractorProfile?.status === 'approved' ? 'Approved for contractor projects' : profile.contractorProfile?.status === 'pending' ? 'Pending admin review' : profile.contractorProfile?.status === 'rejected' ? 'Rejected by admin' : 'Profile not submitted'}</p>
-            </div>
-            <div>
-              <span className="form-label">Service area</span>
-              <p className="worker-profile-value">{profile.contractorProfile?.serviceArea || 'Not provided yet'}</p>
-            </div>
-            <div>
-              <span className="form-label">Available opportunities</span>
-              <p className="worker-profile-value">{filteredContractorOffers.length > 0 ? `${filteredContractorOffers.length} offer${filteredContractorOffers.length > 1 ? 's' : ''} available` : 'No contractor offers yet'}</p>
-            </div>
-          </div>
-
-          <div className="worker-dashboard-filter-row" style={{ marginTop: '20px', display: 'flex', flexWrap: 'wrap', gap: '14px', alignItems: 'flex-end' }}>
-            <div style={{ flex: '1 1 320px', minWidth: 0 }}>
-              <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                Search projects by city
-              </label>
-              <input
-                type="text"
-                value={contractorCityFilter}
-                onChange={(e) => {
-                  setContractorCityFilter(e.target.value);
-                  setConstructionPage(1);
-                }}
-                placeholder="Type city or neighborhood"
-                style={{ width: '100%', background: 'var(--bg-input)', border: '1px solid var(--border-grey)', borderRadius: '8px', padding: '10px 12px', color: '#f5f5f7', fontSize: '13px', fontFamily: 'inherit', boxSizing: 'border-box' }}
-              />
-            </div>
-            <div className="worker-dashboard-filter-hint" style={{ minWidth: '220px', color: 'var(--text-secondary)', fontSize: '13px' }}>
-              {contractorCityFilter.trim()
-                ? `Filtering offers by city: "${contractorCityFilter.trim()}"`
-                : 'Showing all contractor offers.'}
-            </div>
-          </div>
-
-          {filteredContractorOffers.length > 0 && (
-            <div style={{ marginTop: '20px' }}>
-              <div style={{ marginBottom: '16px' }}>
-                <strong style={{ fontSize: '14px', color: '#fff' }}>Pending Contractor Offer(s)</strong>
-                <p style={{ margin: '6px 0 0', color: 'var(--text-secondary)', fontSize: '13px' }}>Accept any project offer to claim it, or reject if it's not the right fit.</p>
-              </div>
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '820px' }}>
-                  <thead>
-                    <tr style={{ textAlign: 'left', color: 'var(--text-secondary)', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-                      <th style={{ padding: '12px 14px', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Project</th>
-                      <th style={{ padding: '12px 14px', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Description</th>
-                      <th style={{ padding: '12px 14px', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Customer</th>
-                      <th style={{ padding: '12px 14px', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Location</th>
-                      <th style={{ padding: '12px 14px', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Budget</th>
-                      <th style={{ padding: '12px 14px', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody style={{ color: '#fff' }}>
-                    {filteredContractorOffers.map((job) => (
-                      <tr key={job._id} style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-                        <td style={{ padding: '14px' }}>
-                          <div style={{ fontWeight: 700 }}>{job.category}</div>
-                          <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Offer received</div>
-                        </td>
-                        <td style={{ padding: '14px', maxWidth: '280px' }}>
-                          <div style={{ fontSize: '13px', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={job.description}>{job.description || 'No description provided.'}</div>
-                        </td>
-                        <td style={{ padding: '14px' }}>
-                          <div style={{ fontWeight: 600 }}>{job.customer?.name || 'Unknown'}</div>
-                          <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{job.customer?.phone || 'No phone'}</div>
-                        </td>
-                        <td style={{ padding: '14px', maxWidth: '220px' }}>
-                          <button
-                            type="button"
-                            onClick={() => setSelectedProjectLocation(job)}
-                            style={{ background: 'none', border: 'none', padding: 0, color: '#f59e0b', fontWeight: 600, textAlign: 'left', cursor: 'pointer', fontSize: '13px' }}
-                          >
-                            {job.location?.manualAddress || job.location?.address || 'Not provided'}
-                          </button>
-                          <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>Tap to view map</div>
-                        </td>
-                        <td style={{ padding: '14px' }}>
-                          <div style={{ fontSize: '13px', color: '#fff', fontWeight: 600 }}>PKR {job.payment?.basePrice?.toLocaleString() || job.payment?.amount?.toLocaleString() || 'N/A'}</div>
-                        </td>
-                        <td style={{ padding: '14px' }}>
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                            <button
-                              onClick={() => setSelectedBidJob(job)}
-                              className="btn btn-primary"
-                              style={{ minWidth: '110px', padding: '8px 12px', fontSize: '13px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
-                            >
-                              <Briefcase size={14} /> Submit Bid
-                            </button>
-                            <button
-                              onClick={() => handleConstructionResponse(job._id, 'reject')}
-                              className="btn btn-secondary"
-                              style={{ minWidth: '110px', padding: '8px 12px', fontSize: '13px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px', borderColor: 'var(--error-color)', color: 'var(--error-color)' }}
-                            >
-                              <X size={14} /> Reject
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </div>
+        <ContractorOffers
+          profile={profile}
+          filteredContractorOffers={filteredContractorOffers}
+          contractorCityFilter={contractorCityFilter}
+          setContractorCityFilter={setContractorCityFilter}
+          constructionPage={constructionPage}
+          setConstructionPage={setConstructionPage}
+          itemsPerPage={itemsPerPage}
+          selectedBidJob={selectedBidJob}
+          setSelectedBidJob={setSelectedBidJob}
+          bidForm={bidForm}
+          setBidForm={setBidForm}
+          handleBidSubmit={handleBidSubmit}
+          handleConstructionResponse={handleConstructionResponse}
+        />
       )}
 
       {selectedProjectLocation && (
@@ -1722,189 +1292,35 @@ export default function WorkerDashboard({ user }) {
       )}
 
       {activeTab === 'construction' && (
-        <div className="card card--padded">
-          <div className="section-header">
-            <Hammer size={20} color="var(--primary-orange)" />
-            <div className="section-header__text">
-              <h3>Contractor Projects</h3>
-              <p>Review assigned contractor projects with location maps.</p>
-            </div>
-          </div>
-
-          {constructionProjects.length === 0 ? (
-            <EmptyState
-              icon={Hammer}
-              title="No contractor projects assigned"
-              description="Admin-assigned contractor projects will appear here."
-            />
-          ) : (
-            <>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                {visibleConstruction.map((project) => (
-                  <div key={project._id} className="card" style={{ border: '1px solid var(--border-grey)', padding: '20px' }}>
-                    <div className="worker-project-card-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '20px' }}>
-                      {/* Project Details */}
-                      <div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                          <h4 style={{ fontSize: '16px', color: '#fff' }}>{project.category}</h4>
-                          <StatusBadge status={project.status} />
-                        </div>
-
-                        <div style={{ marginBottom: '12px' }}>
-                          <span className="form-label" style={{ fontSize: '11px' }}>Project Description</span>
-                          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>{project.description}</p>
-                        </div>
-
-                        <div style={{ marginBottom: '12px' }}>
-                          <span className="form-label" style={{ fontSize: '11px' }}>Customer</span>
-                          <p style={{ fontSize: '13px', color: '#fff', marginTop: '4px' }}>
-                            {project.customer?.name || 'Customer'}
-                            {project.customer?.phone && <span style={{ color: 'var(--text-secondary)', marginLeft: '8px' }}>{project.customer.phone}</span>}
-                          </p>
-                        </div>
-
-                        <div style={{ marginBottom: '12px' }}>
-                          <span className="form-label" style={{ fontSize: '11px' }}>Project Amount</span>
-                          <p style={{ fontSize: '16px', color: 'var(--success-color)', fontWeight: '700', marginTop: '4px' }}>
-                            PKR {project.payment?.amount?.toLocaleString() || 0}
-                          </p>
-                        </div>
-
-                        <div style={{ marginBottom: '12px' }}>
-                          <span className="form-label" style={{ fontSize: '11px' }}>Location Address</span>
-                          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>{project.location?.address}</p>
-                        </div>
-
-                        {project.status === 'pending_acceptance' && (
-                          <div className="worker-project-action-row" style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
-                            <button
-                              onClick={() => handleConstructionResponse(project._id, 'accept')}
-                              className="btn btn-primary"
-                              style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
-                            >
-                              <Check size={16} /> Accept Project
-                            </button>
-                            <button
-                              onClick={() => handleConstructionResponse(project._id, 'reject')}
-                              className="btn btn-secondary"
-                              style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', borderColor: 'var(--error-color)', color: 'var(--error-color)' }}
-                            >
-                              <X size={16} /> Reject Project
-                            </button>
-                          </div>
-                        )}
-
-                        {project.status === 'assigned' && (
-                          <div style={{ marginTop: '16px', padding: '12px', background: 'rgba(34,197,94,0.07)', borderRadius: '8px', border: '1px solid rgba(34,197,94,0.2)' }}>
-                            <p style={{ fontSize: '13px', color: '#86efac', margin: 0 }}>✅ Project accepted - Work in progress</p>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Map Display */}
-                      <div>
-                        <span className="form-label" style={{ fontSize: '11px', marginBottom: '8px', display: 'block' }}>Project Location</span>
-                        <div style={{ height: '250px', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border-grey)' }}>
-                          {project.location?.latitude && project.location?.longitude ? (
-                            <MapContainer
-                              center={[project.location.latitude, project.location.longitude]}
-                              zoom={14}
-                              style={{ height: '100%', width: '100%' }}
-                            >
-                              <TileLayer
-                                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                              />
-                              <Marker position={[project.location.latitude, project.location.longitude]}>
-                                <Popup>
-                                  <div style={{ fontSize: '12px' }}>
-                                    <strong>{project.category}</strong><br />
-                                    {project.location?.address}
-                                  </div>
-                                </Popup>
-                              </Marker>
-                            </MapContainer>
-                          ) : (
-                            <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>
-                              <Map size={32} />
-                              <span style={{ marginLeft: '8px' }}>Location not available</span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <Pagination
-                page={constructionPage}
-                totalPages={constructionTotalPages}
-                totalItems={constructionProjects.length}
-                pageSize={itemsPerPage}
-                onPageChange={setConstructionPage}
-                itemLabel="projects"
-              />
-            </>
-          )}
-        </div>
+        <ConstructionProjects
+          filteredConstructionProjects={filteredConstructionProjects}
+          constructionPage={constructionPage}
+          setConstructionPage={setConstructionPage}
+          itemsPerPage={itemsPerPage}
+          contractorCityFilter={contractorCityFilter}
+          setContractorCityFilter={setContractorCityFilter}
+          selectedProjectLocation={selectedProjectLocation}
+          setSelectedProjectLocation={setSelectedProjectLocation}
+          selectedBidJob={selectedBidJob}
+          setSelectedBidJob={setSelectedBidJob}
+          bidForm={bidForm}
+          setBidForm={setBidForm}
+          handleConstructionResponse={handleConstructionResponse}
+          handleBidSubmit={handleBidSubmit}
+          getAddressText={getAddressText}
+          getDistanceKm={getDistanceKm}
+          gpsLocation={gpsLocation}
+        />
       )}
 
       {activeTab === 'history' && (
-        <div className="card card--padded">
-          <div className="section-header">
-            <ListChecks size={20} color="var(--primary-orange)" />
-            <div className="section-header__text">
-              <h3>Service History</h3>
-              <p>Your recent jobs, payments, and completed service log.</p>
-            </div>
-          </div>
-          {historyLoading ? (
-            <TableSkeleton rows={4} cols={5} />
-          ) : jobsHistory.length === 0 ? (
-            <EmptyState
-              icon={ListChecks}
-              title="No service history yet"
-              description="Completed and assigned jobs will appear here."
-            />
-          ) : (
-            <>
-              <div className="data-table-wrap">
-                <table className="data-table">
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid var(--border-grey)', color: 'var(--text-secondary)' }}>
-                      <th style={{ padding: '12px' }}>Service</th>
-                      <th style={{ padding: '12px' }}>Customer</th>
-                      <th style={{ padding: '12px' }}>Date</th>
-                      <th style={{ padding: '12px' }}>Status</th>
-                      <th style={{ padding: '12px' }}>Payment</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {visibleHistory.map((job) => (
-                      <tr key={job._id} style={{ borderBottom: '1px solid var(--border-grey)' }}>
-                        <td style={{ padding: '12px' }}>{job.category}</td>
-                        <td style={{ padding: '12px' }}>{job.customer?.name || 'Customer'}</td>
-                        <td style={{ padding: '12px' }}>{new Date(job.createdAt).toLocaleDateString()}</td>
-                        <td><StatusBadge status={job.status} /></td>
-                        <td style={{ padding: '12px' }}>
-                          {job.payment.status === 'paid' ? `Paid PKR ${job.payment.amount}` : `Held PKR ${job.payment.amount}`}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <Pagination
-                page={historyPage}
-                totalPages={historyTotalPages}
-                totalItems={jobsHistory.length}
-                pageSize={itemsPerPage}
-                onPageChange={setHistoryPage}
-                itemLabel="records"
-              />
-            </>
-          )}
-        </div>
+        <WorkerHistory
+          jobsHistory={jobsHistory}
+          historyLoading={historyLoading}
+          historyPage={historyPage}
+          setHistoryPage={setHistoryPage}
+          itemsPerPage={itemsPerPage}
+        />
       )}
 
       {showTutorial && highlightRect && (

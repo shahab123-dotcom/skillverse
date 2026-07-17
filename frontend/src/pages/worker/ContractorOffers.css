@@ -1,0 +1,42 @@
+/* Contractor Offers Page Styles */
+
+.worker-profile-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+}
+
+.worker-dashboard-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: flex-end;
+}
+
+.worker-dashboard-filter-hint {
+  min-width: 220px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.worker-profile-value {
+  margin: 6px 0 0;
+  font-weight: 600;
+  font-size: 15px;
+}
+
+/* Responsive Design */
+@media (max-width: 600px) {
+  .worker-profile-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .worker-dashboard-filter-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .worker-dashboard-filter-hint {
+    min-width: 0;
+  }
+}

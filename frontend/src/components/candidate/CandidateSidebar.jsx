@@ -1,3 +1,4 @@
+import './CandidateSidebar.css';
 import { Zap, Hammer, Clock, ShieldAlert } from 'lucide-react';
 
 const CANDIDATE_TABS = [
@@ -9,26 +10,26 @@ const CANDIDATE_TABS = [
 
 export default function CandidateSidebar({ activeTab, onChange }) {
   return (
-    <aside className="dashboard-sidebar">
-      <div className="sidebar-panel">
-        <div className="sidebar-brand">
-          <div className="sidebar-brand__icon">
+    <aside className="candidate-dashboard-sidebar">
+      <div className="candidate-sidebar-panel">
+        <div className="candidate-sidebar-brand">
+          <div className="candidate-sidebar-brand__icon">
             <Zap size={22} />
           </div>
           <div>
-            <p className="sidebar-role">Customer</p>
-            <h3 className="sidebar-title">Service Center</h3>
+            <p className="candidate-sidebar-role">Customer</p>
+            <h3 className="candidate-sidebar-title">Service Center</h3>
           </div>
         </div>
 
-        <div className="sidebar-items">
+        <div className="candidate-sidebar-items">
           {CANDIDATE_TABS.map((item) => {
             const Icon = item.icon;
             return (
               <button
                 key={item.id}
                 type="button"
-                className={`sidebar-item ${activeTab === item.id ? 'active' : ''}`}
+                className={`candidate-sidebar-item ${activeTab === item.id ? 'active' : ''}`}
                 onClick={() => onChange(item.id)}
               >
                 <Icon size={18} />

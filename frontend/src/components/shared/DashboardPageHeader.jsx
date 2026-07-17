@@ -1,3 +1,5 @@
+import './DashboardPageHeader.css';
+
 export default function DashboardPageHeader({ title, subtitle, userName }) {
   return (
     <header className="dashboard-page-header">

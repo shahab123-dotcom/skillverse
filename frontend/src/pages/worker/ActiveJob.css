@@ -1,0 +1,20 @@
+/* Active Job Page Styles */
+
+.worker-mobile-stack {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.chat-input {
+  border: none;
+  background: transparent;
+  color: #fff;
+}
+
+/* Responsive Design */
+@media (max-width: 600px) {
+  .worker-mobile-stack {
+    grid-template-columns: 1fr;
+  }
+}

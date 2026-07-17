@@ -1,3 +1,5 @@
+import './LoadingSkeleton.css';
+
 export function SkeletonLine({ width = '100%', height = '14px' }) {
   return <div className="skeleton skeleton-line" style={{ width, height }} />;
 }

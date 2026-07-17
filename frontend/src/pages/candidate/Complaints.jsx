@@ -1,5 +1,5 @@
-import { Navigate } from 'react-router-dom';
+import CustomerComplaintsPanel from '../../components/candidate/CustomerComplaintsPanel';
 
 export default function ComplaintsPage() {
-  return <Navigate to="/customer" state={{ activeTab: 'complaints' }} replace />;
+  return <CustomerComplaintsPanel />;
 }

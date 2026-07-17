@@ -1,0 +1,53 @@
+.complaint-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.complaint-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 18px 20px;
+}
+
+.complaint-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.complaint-detail {
+  margin-top: 6px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.complaint-time {
+  margin-top: 6px;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.complaint-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  min-width: 180px;
+}
+
+@media (max-width: 640px) {
+  .complaint-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .complaint-actions {
+    align-items: stretch;
+    min-width: 0;
+  }
+}

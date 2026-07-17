@@ -1,3 +1,4 @@
+import './PaymentModal.css';
 import { useState } from 'react';
 import { Eye, EyeOff, Lock, CheckCircle, AlertCircle } from 'lucide-react';
 import { API_URL } from '../../App';

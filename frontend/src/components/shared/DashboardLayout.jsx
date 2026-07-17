@@ -1,3 +1,4 @@
+import './DashboardLayout.css';
 import DashboardPageHeader from './DashboardPageHeader';
 import { DashboardSkeleton } from './LoadingSkeleton';
 

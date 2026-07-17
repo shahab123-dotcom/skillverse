@@ -1,3 +1,5 @@
+import './EmptyState.css';
+
 export default function EmptyState({ icon: Icon, title, description, action }) {
   return (
     <div className="empty-state">

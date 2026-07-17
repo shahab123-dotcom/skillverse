@@ -1,3 +1,4 @@
+import './AdminSidebar.css';
 import { Shield, Users, UserCircle, Hammer, CreditCard, ShieldAlert, ListChecks } from 'lucide-react';
 
 const ADMIN_MENU = [
@@ -13,30 +14,30 @@ const ADMIN_MENU = [
 
 export default function AdminSidebar({ activeTab, onChange }) {
   return (
-    <aside className="dashboard-sidebar">
-      <div className="sidebar-panel">
-        <div className="sidebar-brand">
-          <div className="sidebar-brand__icon">
+    <aside className="admin-dashboard-sidebar">
+      <div className="admin-sidebar-panel">
+        <div className="admin-sidebar-brand">
+          <div className="admin-sidebar-brand__icon">
             <Shield size={22} />
           </div>
           <div>
-            <p className="sidebar-role">Admin</p>
-            <h3 className="sidebar-title">Control Panel</h3>
+            <p className="admin-sidebar-role">Admin</p>
+            <h3 className="admin-sidebar-title">Control Panel</h3>
           </div>
         </div>
 
-        <nav className="sidebar-items" aria-label="Admin navigation">
+        <nav className="admin-sidebar-items" aria-label="Admin navigation">
           {ADMIN_MENU.map((item) => {
             const Icon = item.icon;
             return (
               <button
                 key={item.id}
                 type="button"
-                className={`sidebar-item ${activeTab === item.id ? 'active' : ''}`}
+                className={`admin-sidebar-item ${activeTab === item.id ? 'active' : ''}`}
                 onClick={() => onChange(item.id)}
               >
                 <Icon size={18} />
-                <span className="sidebar-item__label">{item.label}</span>
+                <span className="admin-sidebar-item__label">{item.label}</span>
               </button>
             );
           })}

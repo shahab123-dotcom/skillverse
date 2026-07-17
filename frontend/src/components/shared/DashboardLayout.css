@@ -1,0 +1,32 @@
+.dashboard-shell {
+  max-width: 1280px;
+  margin: 32px auto 48px;
+  padding: 0 20px;
+}
+
+.dashboard-layout {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+.dashboard-main {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .dashboard-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .dashboard-shell {
+    margin: 20px auto 32px;
+    padding: 0 12px;
+  }
+}

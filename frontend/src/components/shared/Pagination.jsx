@@ -1,3 +1,5 @@
+import './Pagination.css';
+
 export default function Pagination({ page, totalPages, totalItems, pageSize, onPageChange, itemLabel = 'items' }) {
   if (totalPages <= 1) return null;
 

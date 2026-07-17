@@ -1,0 +1,39 @@
+/* Construction Project Page Styles */
+
+.construction-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 24px;
+}
+
+.candidate-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.candidate-form-label-inline {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Responsive Design */
+@media (max-width: 1024px) {
+  .construction-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .candidate-form-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .candidate-form-label-inline {
+    align-items: flex-start;
+  }
+}

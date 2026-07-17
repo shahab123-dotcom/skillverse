@@ -1,0 +1,9 @@
+.payment-modal {
+  background: var(--bg-card);
+  border: 1px solid rgba(255, 107, 0, 0.3);
+  border-radius: 16px;
+  padding: 32px;
+  max-width: 480px;
+  width: 100%;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.6);
+}

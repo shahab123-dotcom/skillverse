@@ -1,3 +1,5 @@
+import './StatusBadge.css';
+
 const VARIANT_MAP = {
   pending: 'badge-pending',
   pending_admin_approval: 'badge-pending',

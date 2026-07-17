@@ -1,3 +1,4 @@
+import './ComplaintModal.css';
 import { useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { API_URL } from '../../App';

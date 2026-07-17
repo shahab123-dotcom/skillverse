@@ -1,3 +1,4 @@
+import './Auth.css';
 import React, { useState } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { User, HardHat, Mail, Lock, Phone, Wrench, MapPin, CreditCard, ArrowLeft } from 'lucide-react';

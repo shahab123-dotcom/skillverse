@@ -1,0 +1,70 @@
+.candidate-dashboard-sidebar {
+  width: 100%;
+}
+
+.candidate-sidebar-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border-grey);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.candidate-sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.candidate-sidebar-brand__icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 107, 0, 0.14);
+  color: var(--primary-orange);
+}
+
+.candidate-sidebar-role {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.candidate-sidebar-title {
+  font-size: 1rem;
+  color: var(--text-primary);
+}
+
+.candidate-sidebar-items {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.candidate-sidebar-item {
+  width: 100%;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  transition: var(--transition);
+  text-align: left;
+}
+
+.candidate-sidebar-item:hover,
+.candidate-sidebar-item.active {
+  background: rgba(255, 107, 0, 0.12);
+  color: var(--primary-orange);
+  border-color: rgba(255, 107, 0, 0.22);
+}
