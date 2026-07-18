@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import io from 'socket.io-client';
-import { Mic, MicOff, Send, Phone, MapPin, CheckCircle, CreditCard, Play, MessageSquare, ShieldAlert, Clock, X } from 'lucide-react';
+import { Mic, MicOff, Send, Phone, MapPin, CheckCircle, CreditCard, Play, MessageSquare, ShieldAlert, Clock, X, Navigation } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import { API_URL } from '../../App';
 import { useToast } from '../../context/ToastContext';
@@ -188,6 +188,7 @@ export default function CustomerDashboard({ user }) {
     fetchLocation();
   }, []);
 
+  
   // Trigger onboarding walkthrough if first time login
   useEffect(() => {
     if (user && user.id) {
@@ -675,6 +676,21 @@ export default function CustomerDashboard({ user }) {
     } catch (err) {
       console.error("Error sending voice message:", err);
     }
+  };
+
+  const navigateToWorker = () => {
+    if (!workerCoords || !latitude || !longitude) {
+      toast.error('Worker location not available yet.');
+      return;
+    }
+
+    const url =
+      `https://www.google.com/maps/dir/?api=1` +
+      `&origin=${latitude},${longitude}` +
+      `&destination=${workerCoords.latitude},${workerCoords.longitude}` +
+      `&travelmode=driving`;
+
+    window.open(url, '_blank');
   };
 
   // Daily Services Submission
@@ -1372,6 +1388,21 @@ export default function CustomerDashboard({ user }) {
                   </MapContainer>
                 </div>
               )}
+
+              {dispatchStatus === 'accepted' && workerCoords && (
+                <div style={{ marginBottom: '20px' }}>
+                  <button
+                    onClick={navigateToWorker}
+                    className="btn btn-primary"
+                    style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '12px' }}
+                  >
+                    <Navigation size={16} /> Navigate to Worker
+                  </button>
+                </div>
+              )}
+
+
+              
 
                 {/* ── Chat Box ── */}
               <div ref={chatRef} style={{ marginTop: '20px', border: '1px solid var(--border-grey)', borderRadius: '14px', overflow: 'hidden' }}>

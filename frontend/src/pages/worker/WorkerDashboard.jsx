@@ -180,6 +180,8 @@ export default function WorkerDashboard({ user }) {
     }
   };
 
+  // console.log(activeJob.location);
+
   const loadConstructionProjects = async () => {
     try {
       const response = await fetch(`${API_URL}/api/jobs/worker/construction`, {
@@ -1066,6 +1068,7 @@ export default function WorkerDashboard({ user }) {
     );
   }
 
+
   const pageMeta = {
     overview: { title: 'Overview', subtitle: 'Your earnings, profile, and performance at a glance.' },
     'active-job': { title: 'Active Job', subtitle: 'Navigate to the customer, chat, and update job status.' },
@@ -1220,6 +1223,7 @@ export default function WorkerDashboard({ user }) {
           handleToggleAvailability={handleToggleAvailability}
         />
       )}
+
 
       {activeTab === 'contractor-offers' && (
         <ContractorOffers

@@ -158,6 +158,27 @@ export default function ActiveJob({
     }
   };
 
+  const navigateToCustomer = () => {
+  if (!gpsLocation || !activeJob?.location) {
+    alert("Location not available.");
+    return;
+  }
+
+  const workerLat = gpsLocation.latitude;
+  const workerLng = gpsLocation.longitude;
+
+  const customerLat = activeJob.location.latitude;
+  const customerLng = activeJob.location.longitude;
+
+  const url =
+    `https://www.google.com/maps/dir/?api=1` +
+    `&origin=${workerLat},${workerLng}` +
+    `&destination=${customerLat},${customerLng}` +
+    `&travelmode=driving`;
+
+  window.open(url, "_blank");
+};
+
   if (!activeJob) {
     return (
       <EmptyState
@@ -242,9 +263,14 @@ export default function ActiveJob({
             </button>
           )}
           {jobStatus === 'en_route' && (
-            <button onClick={handleCompleteJob} className="btn btn-primary" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-              <Check size={16} /> Mark as Arrived
-            </button>
+            <>
+              <button onClick={navigateToCustomer} className="btn btn-primary" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                <Navigation size={16} /> Navigate to Customer
+              </button>
+              <button onClick={handleCompleteJob} className="btn btn-primary" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                <Check size={16} /> Mark as Arrived
+              </button>
+            </>
           )}
           <button onClick={handleRejectJob} className="btn btn-secondary" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
             <X size={16} /> Reject Job
